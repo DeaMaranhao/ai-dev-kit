@@ -295,6 +295,41 @@ if echo "$DEPLOY_OUTPUT" | grep -q '"state":"SUCCEEDED"'; then
   echo "         databricks apps add-resource $APP_NAME --resource-type database \\"
   echo "           --resource-name lakebase --database-instance <instance-name>"
   echo ""
+
+  # Clean up old deployment source directories
+  echo -e "${YELLOW}Cleaning up old deployments...${NC}"
+  SP_CLIENT_ID=$(echo "$APP_INFO" | python3 -c "import sys, json; print(json.load(sys.stdin).get('service_principal_client_id', ''))" 2>/dev/null || echo "")
+  CURRENT_DEPLOYMENT_ID=$(echo "$APP_INFO" | python3 -c "import sys, json; print(json.load(sys.stdin).get('active_deployment', {}).get('deployment_id', ''))" 2>/dev/null || echo "")
+
+  if [ -n "$SP_CLIENT_ID" ] && [ -n "$CURRENT_DEPLOYMENT_ID" ]; then
+    SP_SRC_PATH="/Workspace/Users/${SP_CLIENT_ID}/src"
+    OLD_DIRS=$(databricks workspace list "$SP_SRC_PATH" --output json 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+objects = data if isinstance(data, list) else data.get('objects', [])
+current = '$CURRENT_DEPLOYMENT_ID'
+for obj in objects:
+    path = obj.get('path', '')
+    name = path.rsplit('/', 1)[-1] if '/' in path else path
+    if name != current and obj.get('object_type', '') == 'DIRECTORY':
+        print(path)
+" 2>/dev/null || echo "")
+
+    if [ -n "$OLD_DIRS" ]; then
+      CLEANED=0
+      while IFS= read -r dir_path; do
+        if databricks workspace delete "$dir_path" --recursive 2>/dev/null; then
+          CLEANED=$((CLEANED + 1))
+        fi
+      done <<< "$OLD_DIRS"
+      echo -e "  ${GREEN}✓${NC} Removed $CLEANED old deployment(s)"
+    else
+      echo -e "  ${GREEN}✓${NC} No old deployments to clean up"
+    fi
+  else
+    echo -e "  ${YELLOW}⚠${NC} Could not determine deployment info, skipping cleanup"
+  fi
+  echo ""
 else
   echo ""
   echo -e "${RED}Deployment may have issues. Check the output above.${NC}"
