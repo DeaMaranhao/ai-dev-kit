@@ -39,6 +39,7 @@ AI-Driven Development (vibe coding) on Databricks just got a whole lot better. T
 | [**Visual Builder App**](#visual-builder-app) | Web-based UI for Databricks development | `databricks-builder-app/` |
 | [**Core Library**](#core-library) | Building custom integrations (LangChain, OpenAI, etc.) | `pip install` |
 | [**Skills Only**](databricks-skills/) | Provide Databricks patterns and best practices (without MCP functions) | Install skills |
+| [**Genie Code Skills**](databricks-skills/install_skills_to_genie_code.sh) | Install Databricks skills for Genie Code to reference | [Genie Code skills (install)](#genie-code-skills) |
 | [**MCP Tools Only**](databricks-mcp-server/) | Just executable actions (no guidance) | Register MCP server |
 ---
 
@@ -157,6 +158,23 @@ results = execute_sql("SELECT * FROM my_catalog.schema.table LIMIT 10")
 Works with LangChain, OpenAI Agents SDK, or any Python framework. See [databricks-tools-core/](databricks-tools-core/) for details.
 
 ---
+## Genie Code Skills
+  
+  Will install and deploy all available skills to your personal skills directory for all Genie Code sessions to reference while planning/building anything directly in the UI. No post-install steps as worksapce is automatically configured during install process.
+
+  **Basic installation** (uses DEFAULT profile)
+
+```bash
+cd ai-dev-kit/databricks-skills
+./install_skills_to_genie_code.sh
+```
+
+**Advance installation** (uses provided profile)
+
+```bash
+cd ai-dev-kit/databricks-skills
+./install_skills_to_genie_code <profile_name>
+```
 
 ## What's Included
 
