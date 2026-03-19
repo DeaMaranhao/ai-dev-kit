@@ -160,7 +160,7 @@ Works with LangChain, OpenAI Agents SDK, or any Python framework. See [databrick
 ---
 ## Genie Code Skills
   
-  Will install and deploy all available skills to your personal skills directory for all Genie Code sessions to reference while planning/building anything directly in the UI. No post-install steps as worksapce is automatically configured during install process.
+  Will install and deploy all available skills to your personal skills directory for all Genie Code sessions to reference while planning/building anything directly in the UI. No post-install steps as workspace is automatically configured during install process for Genie Code to use the skills.
 
   **Basic installation** (uses DEFAULT profile)
 
@@ -175,6 +175,12 @@ cd ai-dev-kit/databricks-skills
 cd ai-dev-kit/databricks-skills
 ./install_skills_to_genie_code <profile_name>
 ```
+
+**Skill modification or Custom Skill**
+
+After the script successfully installs the skills to your workspace, you may find the skills under `/Workspace/Users/<your_user_name>/.assistant/skills`.
+
+This directory is customizable if you wish to only use certain skills or even create custom skills that are related to your organization to make Genie Code even better.  You can modify/remove existing skills or create new skills folders that Genie Code will automatically use in any session.
 
 ## What's Included
 
