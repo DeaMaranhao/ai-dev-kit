@@ -292,6 +292,7 @@ databricks vector-search indexes delete-index \
 | **Embedding dimension mismatch** | Ensure query and index dimensions match |
 | **Index not updating** | Check pipeline_type; use sync_index() for TRIGGERED |
 | **Out of capacity** | Upgrade to Storage-Optimized (1B+ vectors) |
+| **`query_vector` truncated by MCP tool** | MCP tool calls serialize arrays as JSON and can truncate large vectors (e.g. 1024-dim). Use `query_text` instead (for managed embedding indexes), or use the Databricks SDK/CLI to pass raw vectors |
 
 ## Embedding Models
 
@@ -366,7 +367,7 @@ indexes = get_vs_index(endpoint_name="my-vs-endpoint")
 
 | Tool | Description |
 |------|-------------|
-| `query_vs_index` | Query index with `query_text`, `query_vector`, or hybrid (`query_type="HYBRID"`) |
+| `query_vs_index` | Query index with `query_text`, `query_vector`, or hybrid (`query_type="HYBRID"`). Prefer `query_text` over `query_vector` — MCP tool calls can truncate large embedding arrays (1024-dim) |
 | `manage_vs_data` | CRUD operations on Direct Access indexes. `operation`: `"upsert"`, `"delete"`, `"scan"`, `"sync"` |
 
 ```python
