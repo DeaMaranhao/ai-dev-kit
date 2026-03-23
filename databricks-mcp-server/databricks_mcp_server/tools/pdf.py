@@ -17,9 +17,9 @@ def generate_and_upload_pdfs(
     schema: str,
     description: str,
     count: int,
-    volume: str = 'raw_data',
-    folder: str = 'pdf_documents',
-    doc_size: Literal['SMALL', 'MEDIUM', 'LARGE'] = 'MEDIUM',
+    volume: str = "raw_data",
+    folder: str = "pdf_documents",
+    doc_size: Literal["SMALL", "MEDIUM", "LARGE"] = "MEDIUM",
     overwrite_folder: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -93,11 +93,11 @@ def generate_and_upload_pdfs(
     )
 
     return {
-        'success': result.success,
-        'volume_path': result.volume_path,
-        'pdfs_generated': result.pdfs_generated,
-        'pdfs_failed': result.pdfs_failed,
-        'errors': result.errors,
+        "success": result.success,
+        "volume_path": result.volume_path,
+        "pdfs_generated": result.pdfs_generated,
+        "pdfs_failed": result.pdfs_failed,
+        "errors": result.errors,
     }
 
 
@@ -109,9 +109,9 @@ def generate_and_upload_pdf(
     guideline: str,
     catalog: str,
     schema: str,
-    volume: str = 'raw_data',
-    folder: str = 'pdf_documents',
-    doc_size: Literal['SMALL', 'MEDIUM', 'LARGE'] = 'MEDIUM',
+    volume: str = "raw_data",
+    folder: str = "pdf_documents",
+    doc_size: Literal["SMALL", "MEDIUM", "LARGE"] = "MEDIUM",
 ) -> Dict[str, Any]:
     """
     Generate a single PDF document and upload to a Unity Catalog volume.
@@ -163,12 +163,13 @@ def generate_and_upload_pdf(
     """
     # Generate model_id from title (used for filename)
     import re
-    model_id = re.sub(r'[^a-zA-Z0-9]+', '_', title).strip('_').upper()
+
+    model_id = re.sub(r"[^a-zA-Z0-9]+", "_", title).strip("_").upper()
 
     # Create document specification
     doc_spec = DocumentSpecification(
         title=title,
-        category='Document',  # Simplified - category info can be in description
+        category="Document",  # Simplified - category info can be in description
         model=model_id,
         description=description,
         question=question,
@@ -192,8 +193,8 @@ def generate_and_upload_pdf(
         )
 
     return {
-        'success': result.success,
-        'pdf_path': result.pdf_path,
-        'question_path': result.question_path,
-        'error': result.error,
+        "success": result.success,
+        "pdf_path": result.pdf_path,
+        "question_path": result.question_path,
+        "error": result.error,
     }

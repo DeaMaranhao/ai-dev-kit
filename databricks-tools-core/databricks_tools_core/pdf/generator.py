@@ -28,22 +28,32 @@ logger = logging.getLogger(__name__)
 # Size configurations for document generation
 _SIZE_CONFIG = {
     DocSize.SMALL: {
-        'pages': '1 page',
-        'max_tokens': 4000,
-        'content_guidance': 'Keep it concise and focused. Include only the most essential information.',
-        'structure': 'Use a simple structure: title, brief introduction, main content (2-3 short sections), and conclusion.',
+        "pages": "1 page",
+        "max_tokens": 4000,
+        "content_guidance": "Keep it concise and focused. Include only the most essential information.",
+        "structure": (
+            "Use a simple structure: title, brief introduction, main content (2-3 short sections), and conclusion."
+        ),
     },
     DocSize.MEDIUM: {
-        'pages': '4-6 pages',
-        'max_tokens': 12000,
-        'content_guidance': 'Provide comprehensive coverage with good detail. Include examples and explanations.',
-        'structure': 'Use a standard structure: title, table of contents, introduction, multiple detailed sections, examples, and conclusion.',
+        "pages": "4-6 pages",
+        "max_tokens": 12000,
+        "content_guidance": ("Provide comprehensive coverage with good detail. Include examples and explanations."),
+        "structure": (
+            "Use a standard structure: title, table of contents, introduction, "
+            "multiple detailed sections, examples, and conclusion."
+        ),
     },
     DocSize.LARGE: {
-        'pages': '10+ pages',
-        'max_tokens': 20000,
-        'content_guidance': 'Be exhaustive and thorough. Include extensive examples, edge cases, troubleshooting, and appendices.',
-        'structure': 'Use a comprehensive structure: title page, table of contents, executive summary, multiple chapters with subsections, detailed examples, appendices, and glossary.',
+        "pages": "10+ pages",
+        "max_tokens": 20000,
+        "content_guidance": (
+            "Be exhaustive and thorough. Include extensive examples, edge cases, troubleshooting, and appendices."
+        ),
+        "structure": (
+            "Use a comprehensive structure: title page, table of contents, executive summary, "
+            "multiple chapters with subsections, detailed examples, appendices, and glossary."
+        ),
     },
 }
 
@@ -79,11 +89,11 @@ DOCUMENT:
 
 CONTEXT: {description}
 
-TARGET LENGTH: {config['pages']}
+TARGET LENGTH: {config["pages"]}
 
-CONTENT GUIDANCE: {config['content_guidance']}
+CONTENT GUIDANCE: {config["content_guidance"]}
 
-STRUCTURE: {config['structure']}
+STRUCTURE: {config["structure"]}
 
 Generate complete, valid HTML5 (<!DOCTYPE html>, <html>, <head>, <style>, <body>). No markdown wrapping."""
 
@@ -163,7 +173,7 @@ def _convert_html_to_pdf(html_content: str, output_path: str) -> bool:
     try:
         import fitz  # PyMuPDF
 
-        logger.debug(f'Converting HTML to PDF using PyMuPDF: {output_path}')
+        logger.debug(f"Converting HTML to PDF using PyMuPDF: {output_path}")
 
         # Create a Story from the HTML
         story = fitz.Story(html=html_content)
@@ -185,17 +195,17 @@ def _convert_html_to_pdf(html_content: str, output_path: str) -> bool:
         # Check if file was created successfully
         if Path(output_path).exists():
             file_size = Path(output_path).stat().st_size
-            logger.info(f'PDF saved: {output_path} (size: {file_size:,} bytes)')
+            logger.info(f"PDF saved: {output_path} (size: {file_size:,} bytes)")
             return True
         else:
-            logger.error('PyMuPDF conversion failed - file not created')
+            logger.error("PyMuPDF conversion failed - file not created")
             return False
 
     except ImportError:
-        logger.error('PyMuPDF is not installed. Install with: pip install pymupdf')
+        logger.error("PyMuPDF is not installed. Install with: pip install pymupdf")
         return False
     except Exception as e:
-        logger.error(f'Failed to convert HTML to PDF: {str(e)}', exc_info=True)
+        logger.error(f"Failed to convert HTML to PDF: {str(e)}", exc_info=True)
         return False
 
 
@@ -207,15 +217,15 @@ def _convert_html_to_pdf(html_content: str, output_path: str) -> bool:
 def _delete_folder_contents(catalog: str, schema: str, volume: str, folder: str, max_workers: int = 5) -> None:
     """Delete all files in a volume folder in parallel."""
     w = get_workspace_client()
-    volume_path = f'/Volumes/{catalog}/{schema}/{volume}/{folder}'
+    volume_path = f"/Volumes/{catalog}/{schema}/{volume}/{folder}"
 
     def delete_file(file_path: str) -> bool:
         try:
             w.files.delete(file_path)
-            logger.debug(f'Deleted: {file_path}')
+            logger.debug(f"Deleted: {file_path}")
             return True
         except Exception as e:
-            logger.warning(f'Could not delete {file_path}: {e}')
+            logger.warning(f"Could not delete {file_path}: {e}")
             return False
 
     try:
@@ -228,31 +238,31 @@ def _delete_folder_contents(catalog: str, schema: str, volume: str, folder: str,
             for future in as_completed(futures):
                 future.result()  # Raise any exceptions
 
-        logger.info(f'Cleared folder contents: {volume_path} ({len(files)} files)')
+        logger.info(f"Cleared folder contents: {volume_path} ({len(files)} files)")
     except Exception as e:
         # Folder might not exist yet, which is fine
-        logger.debug(f'Folder does not exist or could not be listed: {volume_path} - {e}')
+        logger.debug(f"Folder does not exist or could not be listed: {volume_path} - {e}")
 
 
 def _upload_to_volume(local_path: str, catalog: str, schema: str, volume: str, folder: str, filename: str) -> bool:
     """Upload a file to a volume, creating the folder if needed."""
     from ..unity_catalog.volume_files import create_volume_directory
 
-    folder_path = f'/Volumes/{catalog}/{schema}/{volume}/{folder}'
-    volume_path = f'{folder_path}/{filename}'
+    folder_path = f"/Volumes/{catalog}/{schema}/{volume}/{folder}"
+    volume_path = f"{folder_path}/{filename}"
 
     # Ensure folder exists
     try:
         create_volume_directory(folder_path)
     except Exception as e:
-        logger.debug(f'Folder may already exist: {folder_path} - {e}')
+        logger.debug(f"Folder may already exist: {folder_path} - {e}")
 
     result = upload_to_volume(local_path, volume_path, overwrite=True)
     if result.success:
-        logger.debug(f'Uploaded: {volume_path}')
+        logger.debug(f"Uploaded: {volume_path}")
         return True
     else:
-        logger.error(f'Failed to upload {local_path} to {volume_path}: {result.error}')
+        logger.error(f"Failed to upload {local_path} to {volume_path}: {result.error}")
         return False
 
 
@@ -288,14 +298,14 @@ def generate_single_pdf(
     """
     try:
         # Generate safe filename from model identifier
-        safe_name = doc_spec.model.replace(' ', '_').replace('-', '_').lower()
+        safe_name = doc_spec.model.replace(" ", "_").replace("-", "_").lower()
 
-        logger.info(f'Generating PDF: {doc_spec.title} ({safe_name}) - size: {doc_size.value}')
+        logger.info(f"Generating PDF: {doc_spec.title} ({safe_name}) - size: {doc_size.value}")
 
         # Step 1: Generate HTML content
         html_prompt = _get_html_generation_prompt(doc_spec, description, doc_size)
         system_prompt = _get_html_system_prompt(doc_size)
-        max_tokens = _SIZE_CONFIG[doc_size]['max_tokens']
+        max_tokens = _SIZE_CONFIG[doc_size]["max_tokens"]
 
         html_content = call_llm(
             prompt=html_prompt,
@@ -305,46 +315,46 @@ def generate_single_pdf(
         )
 
         # Step 2: Convert HTML to PDF
-        pdf_filename = f'{safe_name}.pdf'
+        pdf_filename = f"{safe_name}.pdf"
         local_pdf_path = str(Path(temp_dir) / pdf_filename)
 
         if not _convert_html_to_pdf(html_content, local_pdf_path):
             return PDFGenerationResult(
-                pdf_path='',
+                pdf_path="",
                 success=False,
-                error=f'Failed to convert HTML to PDF for {doc_spec.title}',
+                error=f"Failed to convert HTML to PDF for {doc_spec.title}",
             )
 
         # Step 3: Upload PDF to volume
         if not _upload_to_volume(local_pdf_path, catalog, schema, volume, folder, pdf_filename):
             return PDFGenerationResult(
-                pdf_path='',
+                pdf_path="",
                 success=False,
-                error=f'Failed to upload PDF for {doc_spec.title}',
+                error=f"Failed to upload PDF for {doc_spec.title}",
             )
 
-        volume_pdf_path = f'/Volumes/{catalog}/{schema}/{volume}/{folder}/{pdf_filename}'
+        volume_pdf_path = f"/Volumes/{catalog}/{schema}/{volume}/{folder}/{pdf_filename}"
 
         # Step 4: Save question/guideline JSON
         question_data = {
-            'title': doc_spec.title,
-            'category': doc_spec.category,
-            'pdf_path': volume_pdf_path,
-            'question': doc_spec.question,
-            'guideline': doc_spec.guideline,
+            "title": doc_spec.title,
+            "category": doc_spec.category,
+            "pdf_path": volume_pdf_path,
+            "question": doc_spec.question,
+            "guideline": doc_spec.guideline,
         }
 
-        json_filename = f'{safe_name}.json'
+        json_filename = f"{safe_name}.json"
         local_json_path = str(Path(temp_dir) / json_filename)
 
-        with open(local_json_path, 'w') as f:
+        with open(local_json_path, "w") as f:
             json.dump(question_data, f, indent=2)
 
         volume_json_path = None
         if _upload_to_volume(local_json_path, catalog, schema, volume, folder, json_filename):
-            volume_json_path = f'/Volumes/{catalog}/{schema}/{volume}/{folder}/{json_filename}'
+            volume_json_path = f"/Volumes/{catalog}/{schema}/{volume}/{folder}/{json_filename}"
 
-        logger.info(f'Successfully generated: {doc_spec.title}')
+        logger.info(f"Successfully generated: {doc_spec.title}")
 
         return PDFGenerationResult(
             pdf_path=volume_pdf_path,
@@ -353,10 +363,10 @@ def generate_single_pdf(
         )
 
     except Exception as e:
-        error_msg = f'Error generating PDF for {doc_spec.title}: {str(e)}'
+        error_msg = f"Error generating PDF for {doc_spec.title}: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return PDFGenerationResult(
-            pdf_path='',
+            pdf_path="",
             success=False,
             error=error_msg,
         )
@@ -372,8 +382,8 @@ def generate_pdf_documents(
     schema: str,
     description: str,
     count: int,
-    volume: str = 'raw_data',
-    folder: str = 'pdf_documents',
+    volume: str = "raw_data",
+    folder: str = "pdf_documents",
     doc_size: DocSize = DocSize.MEDIUM,
     overwrite_folder: bool = False,
     max_workers: int = 4,
@@ -401,37 +411,39 @@ def generate_pdf_documents(
     Returns:
         PDFBatchResult with success status and statistics
     """
-    volume_path = f'/Volumes/{catalog}/{schema}/{volume}/{folder}'
+    volume_path = f"/Volumes/{catalog}/{schema}/{volume}/{folder}"
     errors: list[str] = []
 
-    logger.info(f'Starting PDF generation: {count} documents to {volume_path}')
+    logger.info(f"Starting PDF generation: {count} documents to {volume_path}")
 
     try:
         # Clear folder if requested
         if overwrite_folder:
-            logger.info(f'Clearing existing folder contents: {volume_path}')
+            logger.info(f"Clearing existing folder contents: {volume_path}")
             _delete_folder_contents(catalog, schema, volume, folder)
 
         # Step 1: Generate document specifications
-        logger.info(f'Step 1: Generating {count} document specifications...')
+        logger.info(f"Step 1: Generating {count} document specifications...")
 
         doc_list_prompt = _get_document_list_prompt(description, count)
-        system_prompt = '''You are an expert technical documentation specialist. Generate document specifications based on the given description.
+        system_prompt = """You are an expert technical documentation specialist. \
+Generate document specifications based on the given description.
 
-Return a JSON object with a "documents" array containing exactly the requested number of document specifications. Each document should have:
+Return a JSON object with a "documents" array containing exactly the requested number \
+of document specifications. Each document should have:
 - title: string
 - category: string (Technical, Procedures, Guides, Templates, or Reference)
 - model: string (unique identifier like DOC-001)
 - description: string
 - question: string
-- guideline: string'''
+- guideline: string"""
 
         doc_list_response = call_llm(
             prompt=doc_list_prompt,
             system_prompt=system_prompt,
             mini=True,
             max_tokens=8000,
-            response_format='json_object',
+            response_format="json_object",
         )
 
         try:
@@ -439,7 +451,7 @@ Return a JSON object with a "documents" array containing exactly the requested n
             doc_specs_model = DocumentSpecifications(**response_data)
             document_specs = doc_specs_model.documents
         except (json.JSONDecodeError, ValueError) as e:
-            error_msg = f'Failed to parse document specifications: {e}. Response: {doc_list_response[:500]}'
+            error_msg = f"Failed to parse document specifications: {e}. Response: {doc_list_response[:500]}"
             logger.error(error_msg)
             return PDFBatchResult(
                 success=False,
@@ -455,13 +467,13 @@ Return a JSON object with a "documents" array containing exactly the requested n
                 volume_path=volume_path,
                 pdfs_generated=0,
                 pdfs_failed=count,
-                errors=['No documents generated in response'],
+                errors=["No documents generated in response"],
             )
 
-        logger.info(f'Generated {len(document_specs)} document specifications')
+        logger.info(f"Generated {len(document_specs)} document specifications")
 
         # Step 2: Generate PDFs in parallel
-        logger.info(f'Step 2: Generating PDFs ({max_workers} concurrent)...')
+        logger.info(f"Step 2: Generating PDFs ({max_workers} concurrent)...")
 
         def run_pdf_generation(working_dir: str) -> list:
             """Run PDF generation tasks in the given directory."""
@@ -518,7 +530,7 @@ Return a JSON object with a "documents" array containing exactly the requested n
 
         success = pdfs_generated > 0 and pdfs_failed == 0
 
-        logger.info(f'PDF generation complete: {pdfs_generated}/{len(document_specs)} successful')
+        logger.info(f"PDF generation complete: {pdfs_generated}/{len(document_specs)} successful")
 
         return PDFBatchResult(
             success=success,
@@ -529,7 +541,7 @@ Return a JSON object with a "documents" array containing exactly the requested n
         )
 
     except Exception as e:
-        error_msg = f'PDF generation failed: {str(e)}'
+        error_msg = f"PDF generation failed: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return PDFBatchResult(
             success=False,

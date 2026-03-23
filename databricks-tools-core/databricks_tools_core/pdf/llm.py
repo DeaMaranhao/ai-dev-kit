@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 class LLMConfigurationError(Exception):
     """Raised when LLM is not properly configured."""
 
-    pass
-
 
 @lru_cache(maxsize=1)
 def _discover_databricks_gpt_endpoints() -> tuple[Optional[str], Optional[str]]:
@@ -38,34 +36,33 @@ def _discover_databricks_gpt_endpoints() -> tuple[Optional[str], Optional[str]]:
         # Get all endpoints - SDK fetches all, we filter client-side for databricks-gpt-*
         endpoints = list_serving_endpoints(limit=None)
     except Exception as e:
-        logger.warning(f'Could not list endpoints for auto-discovery: {e}')
+        logger.warning(f"Could not list endpoints for auto-discovery: {e}")
         return None, None
 
     # Filter to databricks-gpt endpoints that are READY
     gpt_endpoints = [
-        ep['name'] for ep in endpoints
-        if ep['name'].startswith('databricks-gpt') and ep.get('state') == 'READY'
+        ep["name"] for ep in endpoints if ep["name"].startswith("databricks-gpt") and ep.get("state") == "READY"
     ]
 
     if not gpt_endpoints:
-        logger.warning('No databricks-gpt endpoints found')
+        logger.warning("No databricks-gpt endpoints found")
         return None, None
 
     # Parse version from endpoint names like "databricks-gpt-5-4" or "databricks-gpt-5-4-nano"
     def parse_version(name: str) -> tuple[int, ...]:
         """Extract version numbers from endpoint name."""
         # Match patterns like "5-4" or "5-4-nano"
-        match = re.search(r'databricks-gpt-(\d+(?:-\d+)*)', name)
+        match = re.search(r"databricks-gpt-(\d+(?:-\d+)*)", name)
         if match:
             version_str = match.group(1)
             # Remove 'nano' suffix if present for version parsing
-            version_str = version_str.replace('-nano', '')
-            return tuple(int(x) for x in version_str.split('-'))
+            version_str = version_str.replace("-nano", "")
+            return tuple(int(x) for x in version_str.split("-"))
         return (0,)
 
     # Separate nano and non-nano endpoints
-    nano_endpoints = [ep for ep in gpt_endpoints if 'nano' in ep.lower()]
-    main_endpoints = [ep for ep in gpt_endpoints if 'nano' not in ep.lower()]
+    nano_endpoints = [ep for ep in gpt_endpoints if "nano" in ep.lower()]
+    main_endpoints = [ep for ep in gpt_endpoints if "nano" not in ep.lower()]
 
     # Sort by version (highest first)
     main_endpoints.sort(key=parse_version, reverse=True)
@@ -74,7 +71,7 @@ def _discover_databricks_gpt_endpoints() -> tuple[Optional[str], Optional[str]]:
     main_model = main_endpoints[0] if main_endpoints else None
     nano_model = nano_endpoints[0] if nano_endpoints else main_model  # Fall back to main if no nano
 
-    logger.info(f'Discovered databricks-gpt endpoints: main={main_model}, nano={nano_model}')
+    logger.info(f"Discovered databricks-gpt endpoints: main={main_model}, nano={nano_model}")
     return main_model, nano_model
 
 
@@ -101,11 +98,11 @@ def _get_model_name(mini: bool = False, model_name: Optional[str] = None) -> str
 
     # Check environment variables
     if mini:
-        env_model = os.getenv('DATABRICKS_MODEL_NANO')
+        env_model = os.getenv("DATABRICKS_MODEL_NANO")
         if env_model:
             return env_model
     else:
-        env_model = os.getenv('DATABRICKS_MODEL')
+        env_model = os.getenv("DATABRICKS_MODEL")
         if env_model:
             return env_model
 
@@ -118,8 +115,8 @@ def _get_model_name(mini: bool = False, model_name: Optional[str] = None) -> str
         return main_model
 
     raise LLMConfigurationError(
-        'No LLM model configured. Set DATABRICKS_MODEL environment variable '
-        'or ensure a databricks-gpt-* endpoint is available in your workspace.'
+        "No LLM model configured. Set DATABRICKS_MODEL environment variable "
+        "or ensure a databricks-gpt-* endpoint is available in your workspace."
     )
 
 
@@ -154,18 +151,18 @@ def call_llm(
     messages: list[dict[str, str]] = []
 
     # Add JSON hint to system prompt if json response requested
-    effective_system_prompt = system_prompt or ''
-    if response_format == 'json_object':
+    effective_system_prompt = system_prompt or ""
+    if response_format == "json_object":
         if effective_system_prompt:
-            effective_system_prompt += '\n\nYou must respond with valid JSON only.'
+            effective_system_prompt += "\n\nYou must respond with valid JSON only."
         else:
-            effective_system_prompt = 'You must respond with valid JSON only.'
+            effective_system_prompt = "You must respond with valid JSON only."
 
     if effective_system_prompt:
-        messages.append({'role': 'system', 'content': effective_system_prompt})
-    messages.append({'role': 'user', 'content': prompt})
+        messages.append({"role": "system", "content": effective_system_prompt})
+    messages.append({"role": "user", "content": prompt})
 
-    logger.info(f'Calling Databricks endpoint: {endpoint_name}')
+    logger.info(f"Calling Databricks endpoint: {endpoint_name}")
 
     try:
         response = query_serving_endpoint(
@@ -175,21 +172,21 @@ def call_llm(
             temperature=temperature if temperature != 1.0 else None,
         )
     except Exception as e:
-        logger.error(f'Error calling {endpoint_name}: {type(e).__name__}: {e}')
+        logger.error(f"Error calling {endpoint_name}: {type(e).__name__}: {e}")
         raise
 
     # Extract content from response
-    if not response.get('choices') or not response['choices'][0].get('message', {}).get('content'):
-        finish_reason = response.get('choices', [{}])[0].get('finish_reason', 'unknown')
-        raise Exception(f'Empty response from model. finish_reason={finish_reason}')
+    if not response.get("choices") or not response["choices"][0].get("message", {}).get("content"):
+        finish_reason = response.get("choices", [{}])[0].get("finish_reason", "unknown")
+        raise Exception(f"Empty response from model. finish_reason={finish_reason}")
 
-    content = response['choices'][0]['message']['content']
+    content = response["choices"][0]["message"]["content"]
 
     # Validate Pydantic response
     if isinstance(response_format, type) and issubclass(response_format, BaseModel):
         try:
             response_format.model_validate(json.loads(content))
         except Exception as e:
-            logger.warning(f'Response validation failed: {e}')
+            logger.warning(f"Response validation failed: {e}")
 
     return content
