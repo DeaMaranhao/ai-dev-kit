@@ -37,7 +37,7 @@ def create_pipeline(
     extra_settings: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
-    Create a new pipeline (Unity Catalog, serverless by default).
+    Create a new Spark Declarative Pipeline (SDP). Unity Catalog, serverless by default.
 
     Args:
         name: Pipeline name
