@@ -157,14 +157,16 @@ def delete_pipeline(pipeline_id: str) -> Dict[str, str]:
     return {"status": "deleted"}
 
 
-@mcp.tool
+@mcp.tool(timeout=300)
 def start_update(
     pipeline_id: str,
     refresh_selection: List[str] = None,
     full_refresh: bool = False,
     full_refresh_selection: List[str] = None,
     validate_only: bool = False,
-) -> Dict[str, str]:
+    wait: bool = True,
+    timeout: int = 300,
+) -> Dict[str, Any]:
     """
     Start a pipeline update or dry-run validation.
 
@@ -174,18 +176,28 @@ def start_update(
         full_refresh: If True, performs full refresh of all tables
         full_refresh_selection: List of table names for full refresh
         validate_only: If True, validates without updating data (dry run)
+        wait: If True (default), wait for the update to complete and return results.
+            If False, return immediately with just the update_id.
+        timeout: Maximum wait time in seconds (default: 300 = 5 minutes)
 
     Returns:
-        Dictionary with update_id for polling status.
+        Dictionary with:
+        - update_id: The update ID
+        - If wait=True, also includes:
+            - state: Final state (COMPLETED, FAILED, CANCELED)
+            - success: True if completed successfully
+            - duration_seconds: Total time taken
+            - errors: List of error/warning events if failed
     """
-    update_id = _start_update(
+    return _start_update(
         pipeline_id=pipeline_id,
         refresh_selection=refresh_selection,
         full_refresh=full_refresh,
         full_refresh_selection=full_refresh_selection,
         validate_only=validate_only,
+        wait=wait,
+        timeout=timeout,
     )
-    return {"update_id": update_id}
 
 
 @mcp.tool
@@ -223,22 +235,22 @@ def stop_pipeline(pipeline_id: str) -> Dict[str, str]:
 def get_pipeline_events(
     pipeline_id: str,
     max_results: int = 5,
-    filter: str = "level='ERROR'",
+    filter: str = "level in ('ERROR', 'WARN')",
     update_id: str = None,
 ) -> List[Dict[str, Any]]:
     """
     Get pipeline events, issues, and error messages.
 
-    Use this to debug pipeline failures. By default returns only ERROR events
+    Use this to debug pipeline failures. By default returns ERROR and WARN events
     since those contain the failure details.
 
     Args:
         pipeline_id: Pipeline ID
         max_results: Maximum number of events to return (default: 5)
-        filter: SQL-like filter expression (default: "level='ERROR'").
+        filter: SQL-like filter expression (default: "level in ('ERROR', 'WARN')").
             Examples:
-            - "level='ERROR'" - only errors (default, best for debugging)
-            - "level in ('ERROR', 'WARN')" - errors and warnings
+            - "level in ('ERROR', 'WARN')" - errors and warnings (default)
+            - "level='ERROR'" - only errors
             - "level='INFO'" - info events (state transitions)
             - "" - all events (no filter)
         update_id: Optional update ID to filter events. If provided, only

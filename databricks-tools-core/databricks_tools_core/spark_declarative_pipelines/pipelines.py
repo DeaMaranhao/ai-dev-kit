@@ -354,7 +354,10 @@ def start_update(
     full_refresh: bool = False,
     full_refresh_selection: Optional[List[str]] = None,
     validate_only: bool = False,
-) -> str:
+    wait: bool = True,
+    timeout: int = 300,
+    poll_interval: int = 5,
+) -> Dict[str, Any]:
     """
     Start a pipeline update or dry-run validation.
 
@@ -364,9 +367,19 @@ def start_update(
         full_refresh: If True, performs full refresh of all tables
         full_refresh_selection: List of table names for full refresh
         validate_only: If True, performs dry-run validation without updating data
+        wait: If True (default), wait for the update to complete and return results.
+            If False, return immediately with just the update_id.
+        timeout: Maximum wait time in seconds (default: 300 = 5 minutes)
+        poll_interval: Time between status checks in seconds (default: 5)
 
     Returns:
-        Update ID for polling status
+        Dictionary with:
+        - update_id: The update ID
+        - If wait=True, also includes:
+            - state: Final state (COMPLETED, FAILED, CANCELED)
+            - success: True if completed successfully
+            - duration_seconds: Total time taken
+            - errors: List of error/warning events if failed (from get_pipeline_events)
     """
     w = get_workspace_client()
 
@@ -378,7 +391,62 @@ def start_update(
         validate_only=validate_only,
     )
 
-    return response.update_id
+    update_id = response.update_id
+
+    if not wait:
+        return {"update_id": update_id}
+
+    # Wait for completion
+    start_time = time.time()
+
+    while True:
+        elapsed = time.time() - start_time
+
+        if elapsed > timeout:
+            return {
+                "update_id": update_id,
+                "state": "TIMEOUT",
+                "success": False,
+                "duration_seconds": round(elapsed, 2),
+                "errors": [
+                    {
+                        "message": f"Pipeline update did not complete within {timeout} seconds. "
+                        f"Check status with get_update(pipeline_id='{pipeline_id}', update_id='{update_id}')."
+                    }
+                ],
+            }
+
+        update_response = w.pipelines.get_update(pipeline_id=pipeline_id, update_id=update_id)
+        update_info = update_response.update
+
+        if not update_info:
+            time.sleep(poll_interval)
+            continue
+
+        state = update_info.state
+
+        if state in TERMINAL_STATES:
+            result = {
+                "update_id": update_id,
+                "state": state.value if state else None,
+                "success": state == UpdateInfoState.COMPLETED,
+                "duration_seconds": round(elapsed, 2),
+                "errors": [],
+            }
+
+            # If failed, get error/warning events for this specific update
+            if state == UpdateInfoState.FAILED:
+                events = get_pipeline_events(
+                    pipeline_id=pipeline_id,
+                    max_results=10,
+                    filter="level in ('ERROR', 'WARN')",
+                    update_id=update_id,
+                )
+                result["errors"] = [e.as_dict() if hasattr(e, "as_dict") else vars(e) for e in events]
+
+            return result
+
+        time.sleep(poll_interval)
 
 
 def get_update(pipeline_id: str, update_id: str) -> GetUpdateResponse:
@@ -410,23 +478,23 @@ def stop_pipeline(pipeline_id: str) -> None:
 def get_pipeline_events(
     pipeline_id: str,
     max_results: int = 5,
-    filter: str = "level='ERROR'",
+    filter: str = "level in ('ERROR', 'WARN')",
     update_id: str = None,
 ) -> List[PipelineEvent]:
     """
     Get pipeline events, issues, and error messages.
 
-    Use this to debug pipeline failures. By default returns only ERROR events
+    Use this to debug pipeline failures. By default returns ERROR and WARN events
     since those contain the failure details. Each event can include full stack
     traces, so output can be verbose.
 
     Args:
         pipeline_id: Pipeline ID
         max_results: Maximum number of events to return (default: 5)
-        filter: SQL-like filter expression (default: "level='ERROR'").
+        filter: SQL-like filter expression (default: "level in ('ERROR', 'WARN')").
             Examples:
-            - "level='ERROR'" - only errors (default)
-            - "level in ('ERROR', 'WARN')" - errors and warnings
+            - "level in ('ERROR', 'WARN')" - errors and warnings (default)
+            - "level='ERROR'" - only errors
             - "level='INFO'" - info events (state transitions)
             - None or "" - all events (no filter)
         update_id: Optional update ID to filter events. If provided, only
