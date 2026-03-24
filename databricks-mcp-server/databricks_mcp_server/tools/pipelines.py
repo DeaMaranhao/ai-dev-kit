@@ -37,20 +37,18 @@ def create_pipeline(
     extra_settings: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
-    Create a new Spark Declarative Pipeline (Unity Catalog, serverless by default).
+    Create a new pipeline (Unity Catalog, serverless by default).
 
     Args:
         name: Pipeline name
-        root_path: Root folder for source code (added to Python sys.path for imports)
+        root_path: Root folder for source code (added to sys.path)
         catalog: Unity Catalog name
         schema: Schema name for output tables
-        workspace_file_paths: List of workspace file paths (raw .sql or .py files)
-        extra_settings: Optional dict with additional pipeline settings (clusters,
-            continuous, development, photon, edition, channel, event_log, configuration,
-            notifications, tags, serverless, etc.). Explicit parameters take precedence.
+        workspace_file_paths: List of workspace .sql or .py file paths
+        extra_settings: Additional settings (clusters, photon, serverless, tags, etc.)
 
     Returns:
-        Dictionary with pipeline_id of the created pipeline.
+        Dict with pipeline_id.
     """
     # Auto-inject default tags into extra_settings; user tags take precedence
     extra_settings = extra_settings or {}
@@ -116,13 +114,11 @@ def update_pipeline(
         root_path: New root folder for source code
         catalog: New catalog name
         schema: New schema name
-        workspace_file_paths: New list of file paths (raw .sql or .py files)
-        extra_settings: Optional dict with additional pipeline settings (clusters,
-            continuous, development, photon, edition, channel, event_log, configuration,
-            notifications, tags, serverless, etc.). Explicit parameters take precedence.
+        workspace_file_paths: New list of .sql or .py file paths
+        extra_settings: Additional settings (clusters, photon, serverless, tags, etc.)
 
     Returns:
-        Dictionary with status message.
+        Dict with status.
     """
     _update_pipeline(
         pipeline_id=pipeline_id,
@@ -169,29 +165,20 @@ def start_update(
     full_error_details: bool = False,
 ) -> Dict[str, Any]:
     """
-    Start a pipeline update or dry-run validation.
+    Start a pipeline update. Waits for completion by default.
 
     Args:
         pipeline_id: Pipeline ID
-        refresh_selection: List of table names to refresh
-        full_refresh: If True, performs full refresh of all tables
-        full_refresh_selection: List of table names for full refresh
-        validate_only: If True, validates without updating data (dry run)
-        wait: If True (default), wait for the update to complete and return results.
-            If False, return immediately with just the update_id.
-        timeout: Maximum wait time in seconds (default: 300 = 5 minutes)
-        full_error_details: If True, return full error events with stack traces.
-            If False (default), return only concise error messages in error_summary.
+        refresh_selection: Table names to refresh
+        full_refresh: Full refresh all tables
+        full_refresh_selection: Table names for full refresh
+        validate_only: Dry run without updating data
+        wait: Wait for completion (default: True)
+        timeout: Max wait time in seconds (default: 300)
+        full_error_details: Include full stack traces (default: False)
 
     Returns:
-        Dictionary with:
-        - update_id: The update ID
-        - If wait=True, also includes:
-            - state: Final state (COMPLETED, FAILED, CANCELED)
-            - success: True if completed successfully
-            - duration_seconds: Total time taken
-            - error_summary: List of concise error messages if failed
-            - errors: Full error events (only if full_error_details=True)
+        Dict with update_id, state, success, error_summary if failed.
     """
     return _start_update(
         pipeline_id=pipeline_id,
@@ -213,28 +200,16 @@ def get_update(
     full_error_details: bool = False,
 ) -> Dict[str, Any]:
     """
-    Get pipeline update status and results.
-
-    If the update failed, automatically fetches ERROR/WARN events for that update.
+    Get pipeline update status. Auto-fetches errors if failed.
 
     Args:
         pipeline_id: Pipeline ID
         update_id: Update ID from start_update
-        include_config: If True, include the full pipeline configuration in the response.
-            Default is False since the config is very large and verbose.
-        full_error_details: If True, return full error events with stack traces.
-            If False (default), return only concise error messages in error_summary.
+        include_config: Include full pipeline config (default: False)
+        full_error_details: Include full stack traces (default: False)
 
     Returns:
-        Dictionary with:
-        - update_id: The update ID
-        - state: Current state (QUEUED, RUNNING, COMPLETED, FAILED, CANCELED)
-        - success: True if completed successfully, False if failed, None if still running
-        - cause: What triggered the update
-        - creation_time: When the update was created
-        - error_summary: List of concise error messages if failed
-        - errors: Full error events (only if full_error_details=True)
-        - config: Pipeline configuration (only if include_config=True)
+        Dict with update_id, state, success, error_summary if failed.
     """
     return _get_update(
         pipeline_id=pipeline_id,
@@ -267,26 +242,16 @@ def get_pipeline_events(
     update_id: str = None,
 ) -> List[Dict[str, Any]]:
     """
-    Get pipeline events, issues, and error messages.
-
-    Use this to debug pipeline failures. By default returns ERROR and WARN events
-    since those contain the failure details.
+    Get pipeline events for debugging. Returns ERROR/WARN by default.
 
     Args:
         pipeline_id: Pipeline ID
-        max_results: Maximum number of events to return (default: 5)
-        filter: SQL-like filter expression (default: "level in ('ERROR', 'WARN')").
-            Examples:
-            - "level in ('ERROR', 'WARN')" - errors and warnings (default)
-            - "level='ERROR'" - only errors
-            - "level='INFO'" - info events (state transitions)
-            - "" - all events (no filter)
-        update_id: Optional update ID to filter events. If provided, only
-            events from this specific update are returned. Get update IDs
-            from get_pipeline().latest_updates or start_update().
+        max_results: Max events to return (default: 5)
+        filter: Filter expression (default: "level in ('ERROR', 'WARN')")
+        update_id: Filter to specific update
 
     Returns:
-        List of event dictionaries with error details.
+        List of event dicts with error details.
     """
     events = _get_pipeline_events(pipeline_id=pipeline_id, max_results=max_results, filter=filter, update_id=update_id)
     return [e.as_dict() if hasattr(e, "as_dict") else vars(e) for e in events]
@@ -306,67 +271,22 @@ def create_or_update_pipeline(
     extra_settings: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
-    Create a new pipeline or update an existing one with the same name.
-
-    This is the main tool for pipeline management. It:
-    1. Searches for an existing pipeline with the same name (or uses 'id' from extra_settings)
-    2. Creates a new pipeline or updates the existing one
-    3. Optionally starts a pipeline run with full refresh
-    4. Optionally waits for the run to complete and returns detailed results
-
-    Uses Unity Catalog and serverless compute by default.
+    Create or update a pipeline by name, optionally run it. Uses Unity Catalog + serverless.
 
     Args:
         name: Pipeline name (used for lookup and creation)
-        root_path: Root folder for source code (added to Python sys.path for imports)
-        catalog: Unity Catalog name for output tables
+        root_path: Root folder for source code (added to sys.path)
+        catalog: Unity Catalog name
         schema: Schema name for output tables
-        workspace_file_paths: List of workspace file paths (raw .sql or .py files)
-        start_run: If True, start a pipeline update after create/update (default: False)
-        wait_for_completion: If True, wait for run to complete (default: False)
-        full_refresh: If True, perform full refresh when starting (default: True)
-        timeout: Maximum wait time in seconds (default: 1800 = 30 minutes)
-        extra_settings: Optional dict with additional pipeline settings. Supports all SDK
-            options: clusters, continuous, development, photon, edition, channel, event_log,
-            configuration, notifications, tags, serverless, etc.
-            If 'id' is provided, the pipeline will be updated instead of created.
-            Explicit parameters (name, root_path, catalog, schema) take precedence.
+        workspace_file_paths: List of workspace .sql or .py file paths
+        start_run: Start pipeline update after create/update
+        wait_for_completion: Wait for run to complete
+        full_refresh: Full refresh when starting (default: True)
+        timeout: Max wait time in seconds (default: 1800)
+        extra_settings: Additional settings (clusters, photon, serverless, tags, etc.)
 
     Returns:
-        Dictionary with detailed status:
-        - pipeline_id: The pipeline ID
-        - pipeline_name: The pipeline name
-        - created: True if newly created, False if updated
-        - success: True if all operations succeeded
-        - state: Final state if run was started (COMPLETED, FAILED, etc.)
-        - duration_seconds: Time taken if waited
-        - error_message: Error message if failed
-        - errors: List of detailed errors if failed
-        - message: Human-readable status message
-
-    Example usage:
-        # Just create/update the pipeline
-        create_or_update_pipeline(name="my_pipeline", ...)
-
-        # Create/update and run immediately
-        create_or_update_pipeline(name="my_pipeline", ..., start_run=True)
-
-        # Create/update, run, and wait for completion
-        create_or_update_pipeline(
-            name="my_pipeline", ...,
-            start_run=True,
-            wait_for_completion=True
-        )
-
-        # Create with custom settings (non-serverless, development mode)
-        create_or_update_pipeline(
-            name="my_pipeline", ...,
-            extra_settings={
-                "serverless": False,
-                "development": True,
-                "clusters": [{"label": "default", "num_workers": 2}]
-            }
-        )
+        Dict with pipeline_id, created (bool), success, state, error_summary if failed.
     """
     # Auto-inject default tags into extra_settings; user tags take precedence
     extra_settings = extra_settings or {}
