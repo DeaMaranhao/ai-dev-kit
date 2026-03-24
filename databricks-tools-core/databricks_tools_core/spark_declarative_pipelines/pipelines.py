@@ -15,7 +15,6 @@ from databricks.sdk.service.pipelines import (
     PipelineLibrary,
     FileLibrary,
     PipelineEvent,
-    GetUpdateResponse,
     UpdateInfoState,
     PipelineCluster,
     EventLogSpec,
@@ -449,19 +448,72 @@ def start_update(
         time.sleep(poll_interval)
 
 
-def get_update(pipeline_id: str, update_id: str) -> GetUpdateResponse:
+def get_update(
+    pipeline_id: str,
+    update_id: str,
+    include_config: bool = False,
+) -> Dict[str, Any]:
     """
     Get pipeline update status and results.
+
+    If the update failed, automatically fetches ERROR/WARN events for that update.
 
     Args:
         pipeline_id: Pipeline ID
         update_id: Update ID from start_update
+        include_config: If True, include the full pipeline configuration in the response.
+            Default is False since the config is very large and verbose.
 
     Returns:
-        GetUpdateResponse with update status (QUEUED, RUNNING, COMPLETED, FAILED, etc.)
+        Dictionary with:
+        - update_id: The update ID
+        - state: Current state (QUEUED, RUNNING, COMPLETED, FAILED, CANCELED)
+        - success: True if completed successfully, False if failed, None if still running
+        - cause: What triggered the update (USER_ACTION, RETRY_ON_FAILURE, etc.)
+        - creation_time: When the update was created
+        - errors: List of ERROR/WARN events if the update failed (empty otherwise)
+        - config: Pipeline configuration (only if include_config=True)
     """
     w = get_workspace_client()
-    return w.pipelines.get_update(pipeline_id=pipeline_id, update_id=update_id)
+    response = w.pipelines.get_update(pipeline_id=pipeline_id, update_id=update_id)
+
+    update_info = response.update
+    if not update_info:
+        return {"update_id": update_id, "state": None, "success": None, "errors": []}
+
+    state = update_info.state
+
+    # Determine success status
+    success = None
+    if state == UpdateInfoState.COMPLETED:
+        success = True
+    elif state in (UpdateInfoState.FAILED, UpdateInfoState.CANCELED):
+        success = False
+
+    result = {
+        "update_id": update_id,
+        "state": state.value if state else None,
+        "success": success,
+        "cause": update_info.cause.value if update_info.cause else None,
+        "creation_time": update_info.creation_time,
+        "errors": [],
+    }
+
+    # If failed, get error/warning events for this specific update
+    if state == UpdateInfoState.FAILED:
+        events = get_pipeline_events(
+            pipeline_id=pipeline_id,
+            max_results=10,
+            filter="level in ('ERROR', 'WARN')",
+            update_id=update_id,
+        )
+        result["errors"] = [e.as_dict() if hasattr(e, "as_dict") else vars(e) for e in events]
+
+    # Optionally include config
+    if include_config and update_info.config:
+        result["config"] = update_info.config.as_dict() if hasattr(update_info.config, "as_dict") else vars(update_info.config)
+
+    return result
 
 
 def stop_pipeline(pipeline_id: str) -> None:
@@ -506,21 +558,31 @@ def get_pipeline_events(
     """
     w = get_workspace_client()
 
-    # Build filter expression, optionally including update_id
     effective_filter = filter if filter else None
-    if update_id:
-        update_filter = f"origin.update_id = '{update_id}'"
-        if effective_filter:
-            effective_filter = f"({effective_filter}) AND {update_filter}"
-        else:
-            effective_filter = update_filter
+
+    # If filtering by update_id, we need to fetch more events and filter client-side
+    # since the API doesn't support origin.update_id in filter expressions
+    api_max_results = max_results * 10 if update_id else max_results
 
     events = w.pipelines.list_pipeline_events(
         pipeline_id=pipeline_id,
-        max_results=max_results,
+        max_results=api_max_results,
         filter=effective_filter,
     )
-    return list(events)
+
+    result = []
+    for event in events:
+        # Filter by update_id client-side if specified
+        if update_id:
+            event_update_id = event.origin.update_id if event.origin else None
+            if event_update_id != update_id:
+                continue
+
+        result.append(event)
+        if len(result) >= max_results:
+            break
+
+    return result
 
 
 def wait_for_pipeline_update(

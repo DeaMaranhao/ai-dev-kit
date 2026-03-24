@@ -201,19 +201,33 @@ def start_update(
 
 
 @mcp.tool
-def get_update(pipeline_id: str, update_id: str) -> Dict[str, Any]:
+def get_update(
+    pipeline_id: str,
+    update_id: str,
+    include_config: bool = False,
+) -> Dict[str, Any]:
     """
     Get pipeline update status and results.
+
+    If the update failed, automatically fetches ERROR/WARN events for that update.
 
     Args:
         pipeline_id: Pipeline ID
         update_id: Update ID from start_update
+        include_config: If True, include the full pipeline configuration in the response.
+            Default is False since the config is very large and verbose.
 
     Returns:
-        Dictionary with update status (QUEUED, RUNNING, COMPLETED, FAILED, etc.)
+        Dictionary with:
+        - update_id: The update ID
+        - state: Current state (QUEUED, RUNNING, COMPLETED, FAILED, CANCELED)
+        - success: True if completed successfully, False if failed, None if still running
+        - cause: What triggered the update
+        - creation_time: When the update was created
+        - errors: List of ERROR/WARN events if the update failed
+        - config: Pipeline configuration (only if include_config=True)
     """
-    result = _get_update(pipeline_id=pipeline_id, update_id=update_id)
-    return result.as_dict() if hasattr(result, "as_dict") else vars(result)
+    return _get_update(pipeline_id=pipeline_id, update_id=update_id, include_config=include_config)
 
 
 @mcp.tool
