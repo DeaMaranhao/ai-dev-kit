@@ -441,6 +441,7 @@ Document:
 
 ## Related Documentation
 
-- **[5-python-api.md](5-python-api.md)** - Modern `dp` API reference
-- **[9-auto_cdc.md](9-auto_cdc.md)** - CDC patterns in detail
+- **[python/1-syntax-basics.md](python/1-syntax-basics.md)** - Modern `dp` API reference
+- **[python/4-cdc-patterns.md](python/4-cdc-patterns.md)** - Python CDC patterns
+- **[sql/4-cdc-patterns.md](sql/4-cdc-patterns.md)** - SQL CDC patterns
 - **[SKILL.md](SKILL.md)** - Main skill entry point

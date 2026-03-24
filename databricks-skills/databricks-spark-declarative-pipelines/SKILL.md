@@ -31,7 +31,7 @@ Use this when the pipeline is **part of an existing Databricks Asset Bundle proj
 - There's already a `databricks.yml` file in the project
 - User is adding a pipeline to an existing app/demo
 
-→ See [8-project-initialization.md](8-project-initialization.md) for adding pipelines to existing bundles
+→ See [3-project-initialization.md](3-project-initialization.md) for adding pipelines to existing bundles
 
 ### Option C: Rapid Iteration with MCP Tools (no bundle management)
 
@@ -41,7 +41,7 @@ Use this when you need to **quickly create, test, and iterate** on a pipeline wi
 - Prototyping or experimenting with pipeline logic
 - User explicitly asks to use MCP tools
 
-→ See [10-mcp-approach.md](10-mcp-approach.md) for MCP-based workflow
+→ See [4-mcp-approach.md](4-mcp-approach.md) for MCP-based workflow
 
 ---
 
@@ -108,7 +108,7 @@ databricks bundle run my_pipeline_etl
 databricks bundle deploy --target prod
 ```
 
-See **[8-project-initialization.md](8-project-initialization.md)** for complete details on bundle initialization, migration, and troubleshooting.
+See **[3-project-initialization.md](3-project-initialization.md)** for complete details on bundle initialization, migration, and troubleshooting.
 
 
 ## Quick Reference
@@ -129,18 +129,33 @@ See **[8-project-initialization.md](8-project-initialization.md)** for complete 
 
 After choosing your workflow (see [Choose Your Workflow](#choose-your-workflow)), determine the specific task:
 
+**Choose documentation by language:**
+
+### SQL Documentation
 | Task | Guide |
 |------|-------|
-| **Setting up standalone pipeline project** | [8-project-initialization.md](8-project-initialization.md) |
-| **Rapid iteration with MCP tools** | [10-mcp-approach.md](10-mcp-approach.md) |
-| **Ingesting data (Auto Loader, Kafka, files)** | [1-ingestion-patterns.md](1-ingestion-patterns.md) |
-| **Streaming tables & change detection** | [2-streaming-patterns.md](2-streaming-patterns.md) |
-| **Querying SCD Type 2 history tables** | [3-scd-query-patterns.md](3-scd-query-patterns.md) |
-| **Implementing AUTO CDC or SCD** | [9-auto_cdc.md](9-auto_cdc.md) |
-| **Performance optimization** | [4-performance-tuning.md](4-performance-tuning.md) |
-| **Python API reference** | [5-python-api.md](5-python-api.md) |
-| **Migrating from DLT** | [6-dlt-migration.md](6-dlt-migration.md) |
-| **Advanced configuration** | [7-advanced-configuration.md](7-advanced-configuration.md) |
+| **SQL syntax basics** | [sql/1-syntax-basics.md](sql/1-syntax-basics.md) |
+| **Data ingestion (Auto Loader, Kafka)** | [sql/2-ingestion.md](sql/2-ingestion.md) |
+| **Streaming patterns (deduplication, windows)** | [sql/3-streaming-patterns.md](sql/3-streaming-patterns.md) |
+| **CDC patterns (AUTO CDC, SCD, queries)** | [sql/4-cdc-patterns.md](sql/4-cdc-patterns.md) |
+| **Performance tuning** | [sql/5-performance.md](sql/5-performance.md) |
+
+### Python Documentation
+| Task | Guide |
+|------|-------|
+| **Python syntax basics** | [python/1-syntax-basics.md](python/1-syntax-basics.md) |
+| **Data ingestion (Auto Loader, Kafka)** | [python/2-ingestion.md](python/2-ingestion.md) |
+| **Streaming patterns (deduplication, windows)** | [python/3-streaming-patterns.md](python/3-streaming-patterns.md) |
+| **CDC patterns (AUTO CDC, SCD, queries)** | [python/4-cdc-patterns.md](python/4-cdc-patterns.md) |
+| **Performance tuning** | [python/5-performance.md](python/5-performance.md) |
+
+### General Documentation
+| Task | Guide |
+|------|-------|
+| **Setting up standalone pipeline project** | [3-project-initialization.md](3-project-initialization.md) |
+| **Rapid iteration with MCP tools** | [4-mcp-approach.md](4-mcp-approach.md) |
+| **Migrating from DLT** | [2-dlt-migration.md](2-dlt-migration.md) |
+
 ---
 
 ## Official Documentation
@@ -188,7 +203,7 @@ After choosing your workflow (see [Choose Your Workflow](#choose-your-workflow))
 
 Both work with the `transformations/**` glob pattern. Choose based on preference.
 
-See **[8-project-initialization.md](8-project-initialization.md)** for complete details on bundle initialization, migration, and troubleshooting.
+See **[3-project-initialization.md](3-project-initialization.md)** for complete details on bundle initialization, migration, and troubleshooting.
 
 ---
 ## General SDP development guidance
@@ -265,7 +280,7 @@ Example: `/Volumes/my_catalog/pipeline_metadata/orders_pipeline_metadata/schemas
 - **Prompt for clarification** only when language intent is truly ambiguous (no explicit mention, mixed signals)
 - **Default to SQL** only when ambiguous AND no Python indicators present
 
-See **[8-project-initialization.md](8-project-initialization.md)** for detailed language detection logic.
+See **[3-project-initialization.md](3-project-initialization.md)** for detailed language detection logic.
 
 
 ## Best Practices (2026)
@@ -278,18 +293,18 @@ See **[8-project-initialization.md](8-project-initialization.md)** for detailed 
   - **Flat structure** (template default): `bronze_*.sql`, `silver_*.sql`, `gold_*.sql` in `transformations/`
   - **Subdirectories**: `transformations/bronze/`, `transformations/silver/`, `transformations/gold/`
   - Both work with the `transformations/**` glob pattern - choose based on team preference
-- See **[8-project-initialization.md](8-project-initialization.md)** for project setup details
+- See **[3-project-initialization.md](3-project-initialization.md)** for project setup details
 
 ### Minimal pipeline config pointers
 - Define parameters in your pipeline’s configuration and access them in code with spark.conf.get("key").
 - In Databricks Asset Bundles, set these under resources.pipelines.<pipeline>.configuration; validate with databricks bundle validate.
 
 ### Modern Defaults
-- **CLUSTER BY** (Liquid Clustering), not PARTITION BY - see [4-performance-tuning.md](4-performance-tuning.md)
+- **CLUSTER BY** (Liquid Clustering), not PARTITION BY - see [sql/5-performance.md](sql/5-performance.md) or [python/5-performance.md](python/5-performance.md)
 - **Raw `.sql`/`.py` files**, not notebooks
 - **Serverless compute ONLY** - Do not use classic clusters unless explicitly required
 - **Unity Catalog** (required for serverless)
-- **read_files()** when using SQL for cloud storage ingestion - see [1-ingestion-patterns.md](1-ingestion-patterns.md)
+- **read_files()** when using SQL for cloud storage ingestion - see [sql/2-ingestion.md](sql/2-ingestion.md)
 
 ### Multi-Schema Patterns
 
@@ -509,9 +524,9 @@ def enriched_orders():
 | **Streaming reads fail** | For file ingestion in a streaming table, you must use the `STREAM` keyword with `read_files`: `FROM STREAM read_files(...)`. For table streams use `FROM stream(table)`. See [read_files — Usage in streaming tables](https://docs.databricks.com/aws/en/sql/language-manual/functions/read_files#usage-in-streaming-tables). |
 | **Timeout during run** | Increase `timeout`, or use `wait_for_completion=False` and check status with `get_pipeline` |
 | **MV doesn't refresh** | Enable row tracking on source tables |
-| **SCD2: query column not found** | Lakeflow uses `__START_AT` and `__END_AT` (double underscore), not `START_AT`/`END_AT`. Use `WHERE __END_AT IS NULL` for current rows. See [3-scd-query-patterns.md](3-scd-query-patterns.md). |
-| **AUTO CDC parse error at APPLY/SEQUENCE** | Put `APPLY AS DELETE WHEN` **before** `SEQUENCE BY`. Only list columns in `COLUMNS * EXCEPT (...)` that exist in the source (omit `_rescued_data` unless bronze uses rescue data). Omit `TRACK HISTORY ON *` if it causes "end of input" errors; default is equivalent. See [2-streaming-patterns.md](2-streaming-patterns.md). |
-| **"Cannot create streaming table from batch query"** | In a streaming table query, use `FROM STREAM read_files(...)` so `read_files` leverages Auto Loader; `FROM read_files(...)` alone is batch. See [1-ingestion-patterns.md](1-ingestion-patterns.md) and [read_files — Usage in streaming tables](https://docs.databricks.com/aws/en/sql/language-manual/functions/read_files#usage-in-streaming-tables). |
+| **SCD2: query column not found** | Lakeflow uses `__START_AT` and `__END_AT` (double underscore), not `START_AT`/`END_AT`. Use `WHERE __END_AT IS NULL` for current rows. See [sql/4-cdc-patterns.md](sql/4-cdc-patterns.md). |
+| **AUTO CDC parse error at APPLY/SEQUENCE** | Put `APPLY AS DELETE WHEN` **before** `SEQUENCE BY`. Only list columns in `COLUMNS * EXCEPT (...)` that exist in the source (omit `_rescued_data` unless bronze uses rescue data). Omit `TRACK HISTORY ON *` if it causes "end of input" errors; default is equivalent. See [sql/4-cdc-patterns.md](sql/4-cdc-patterns.md). |
+| **"Cannot create streaming table from batch query"** | In a streaming table query, use `FROM STREAM read_files(...)` so `read_files` leverages Auto Loader; `FROM read_files(...)` alone is batch. See [sql/2-ingestion.md](sql/2-ingestion.md) and [read_files — Usage in streaming tables](https://docs.databricks.com/aws/en/sql/language-manual/functions/read_files#usage-in-streaming-tables). |
 
 **For detailed errors**, the `result["message"]` from `create_or_update_pipeline` includes suggested next steps. Use `get_pipeline(pipeline_id=...)` which includes recent events and error details.
 
@@ -519,7 +534,7 @@ def enriched_orders():
 
 ## Advanced Pipeline Configuration
 
-For advanced configuration options (development mode, continuous pipelines, custom clusters, notifications, Python dependencies, etc.), see **[7-advanced-configuration.md](7-advanced-configuration.md)**.
+For advanced configuration options (development mode, continuous pipelines, custom clusters, notifications, Python dependencies, etc.), see **[5-advanced-configuration.md](5-advanced-configuration.md)**.
 
 ---
 

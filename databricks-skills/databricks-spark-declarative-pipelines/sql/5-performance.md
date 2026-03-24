@@ -1,14 +1,14 @@
-# Performance Tuning for SDP
+# SQL Performance Tuning
 
-Performance optimization strategies including **Liquid Clustering** (modern approach), materialized view refresh, state management, and compute configuration.
+Performance optimization strategies including Liquid Clustering, materialized view refresh, state management, and compute configuration.
 
 ---
 
 ## Liquid Clustering (Recommended)
 
-**Liquid Clustering** is the recommended approach for data layout optimization. It replaces manual `PARTITION BY` and `Z-ORDER`.
+Liquid Clustering is the recommended approach for data layout optimization. It replaces manual `PARTITION BY` and `Z-ORDER`.
 
-### What is Liquid Clustering?
+### Benefits
 
 - **Adaptive**: Adjusts to data distribution changes
 - **Multi-dimensional**: Clusters on multiple columns simultaneously
@@ -17,7 +17,6 @@ Performance optimization strategies including **Liquid Clustering** (modern appr
 
 ### Basic Syntax
 
-**SQL**:
 ```sql
 CREATE OR REPLACE STREAMING TABLE bronze_events
 CLUSTER BY (event_type, event_date)
@@ -26,19 +25,10 @@ SELECT
   *,
   current_timestamp() AS _ingested_at,
   CAST(current_date() AS DATE) AS event_date
-FROM read_files('/Volumes/my_catalog/my_schema/raw/events/', format => 'json');
+FROM STREAM read_files('/Volumes/my_catalog/my_schema/raw/events/', format => 'json');
 ```
 
-**Python**:
-```python
-from pyspark import pipelines as dp
-
-@dp.table(cluster_by=["event_type", "event_date"])
-def bronze_events():
-    return spark.readStream.format("cloudFiles").load("/data")
-```
-
-### Automatic Cluster Key Selection
+### Automatic Key Selection
 
 ```sql
 -- Let Databricks choose based on query patterns
@@ -67,7 +57,7 @@ SELECT
   *,
   current_timestamp() AS _ingested_at,
   CAST(current_date() AS DATE) AS ingestion_date
-FROM read_files('/Volumes/my_catalog/my_schema/raw/events/', format => 'json');
+FROM STREAM read_files('/Volumes/my_catalog/my_schema/raw/events/', format => 'json');
 ```
 
 **Why**: Bronze filtered by event type for processing and by date for incremental loads.
@@ -117,7 +107,7 @@ GROUP BY product_category, DATE_FORMAT(order_date, 'yyyy-MM');
 | **Silver** | primary_key, business_date | Entity lookups + time ranges |
 | **Gold** | aggregation_dimensions | Dashboard filters |
 
-**Best practices**:
+**Best practices:**
 - First key: Most selective filter (e.g., customer_id)
 - Second key: Next common filter (e.g., date)
 - Order matters: Most selective first
@@ -139,7 +129,7 @@ AS SELECT ...;
 
 **Issues**: Fixed keys, small file problem, skewed distribution, manual OPTIMIZE required.
 
-### After (Modern with Liquid Clustering)
+### After (Modern)
 
 ```sql
 CREATE OR REPLACE STREAMING TABLE events
@@ -157,8 +147,6 @@ AS SELECT ...;
 3. **Compatibility**: Older Delta Lake versions (< DBR 13.3)
 4. **Existing large tables**: Migration cost outweighs benefits
 
-**Otherwise, prefer Liquid Clustering.**
-
 ---
 
 ## Table Properties
@@ -171,10 +159,8 @@ TBLPROPERTIES (
   'delta.autoOptimize.optimizeWrite' = 'true',
   'delta.autoOptimize.autoCompact' = 'true'
 )
-AS SELECT * FROM read_files(...);
+AS SELECT * FROM STREAM read_files(...);
 ```
-
-**Benefits**: Reduces small files, improves reads, automatic compaction.
 
 ### Change Data Feed
 
@@ -194,7 +180,7 @@ TBLPROPERTIES (
   'delta.logRetentionDuration' = '7 days',
   'delta.deletedFileRetentionDuration' = '7 days'
 )
-AS SELECT * FROM read_files(...);
+AS SELECT * FROM STREAM read_files(...);
 ```
 
 **Use for**: High-volume tables to reduce storage costs.
@@ -206,7 +192,7 @@ AS SELECT * FROM read_files(...);
 ### Refresh Frequency
 
 ```sql
--- Near-real-time (frequent)
+-- Near-real-time
 CREATE OR REPLACE MATERIALIZED VIEW gold_live_metrics
 REFRESH EVERY 5 MINUTES
 AS
@@ -217,7 +203,7 @@ SELECT
 FROM silver_metrics
 GROUP BY metric_name;
 
--- Daily reports (scheduled)
+-- Daily reports
 CREATE OR REPLACE MATERIALIZED VIEW gold_daily_summary
 REFRESH EVERY 1 DAY
 AS
@@ -226,12 +212,11 @@ FROM silver_sales
 GROUP BY report_date;
 ```
 
-### Incremental Refresh (Automatic)
+### Incremental Refresh
 
 Materialized views auto-use incremental refresh when possible:
 
 ```sql
--- Refreshes incrementally if source has row tracking
 CREATE OR REPLACE MATERIALIZED VIEW gold_aggregates AS
 SELECT
   product_id,
@@ -246,7 +231,7 @@ GROUP BY product_id;
 ### Pre-Aggregation
 
 ```sql
--- Instead of querying large table repeatedly
+-- Create pre-aggregated MV for fast queries
 CREATE OR REPLACE MATERIALIZED VIEW orders_monthly AS
 SELECT
   customer_id,
@@ -282,7 +267,6 @@ GROUP BY user_id, product_id, session_id;  -- Massive state!
 **Strategy 1: Reduce cardinality**
 
 ```sql
--- Aggregate at higher level
 SELECT
   user_id,
   product_category,  -- 100 categories (not 10K products)
@@ -295,7 +279,6 @@ GROUP BY user_id, product_category, DATE(event_time);
 **Strategy 2: Use time windows**
 
 ```sql
--- Bounded state with windows
 SELECT
   user_id,
   window(event_time, '1 hour') AS time_window,
@@ -337,7 +320,7 @@ GROUP BY user_id, DATE_TRUNC('month', event_date);
 CREATE OR REPLACE STREAMING TABLE sales_enriched AS
 SELECT
   s.sale_id, s.product_id, s.amount,
-  p.product_name, p.category  -- From small static table
+  p.product_name, p.category
 FROM STREAM bronze_sales s
 LEFT JOIN dim_products p ON s.product_id = p.product_id;
 ```
@@ -358,7 +341,33 @@ INNER JOIN STREAM bronze_payments p
   AND p.payment_time BETWEEN o.order_time AND o.order_time + INTERVAL 1 HOUR;
 ```
 
-**Optimization**: Use time bounds in join condition.
+---
+
+## Query Optimization
+
+### Filter Early
+
+```sql
+-- Filter at source
+CREATE OR REPLACE STREAMING TABLE silver_recent AS
+SELECT *
+FROM STREAM bronze_events
+WHERE event_date >= CURRENT_DATE() - INTERVAL 7 DAYS;
+
+-- Avoid filtering late
+-- CREATE OR REPLACE STREAMING TABLE silver_all AS SELECT * FROM STREAM bronze_events;
+-- CREATE OR REPLACE MATERIALIZED VIEW gold_recent AS SELECT * FROM silver_all WHERE ...;
+```
+
+### Select Specific Columns
+
+```sql
+-- Only needed columns
+SELECT customer_id, order_date, amount FROM large_table;
+
+-- Avoid SELECT *
+-- SELECT * FROM large_table;
+```
 
 ---
 
@@ -382,55 +391,9 @@ execution_mode: continuous  # or triggered
 serverless: true
 ```
 
-**Advantages**: No cluster management, instant scaling, lower cost for bursty workloads.
-
----
-
-## Query Optimization
-
-### Filter Early
-
-```sql
--- ✅ Filter at source
-CREATE OR REPLACE STREAMING TABLE silver_recent AS
-SELECT *
-FROM STREAM bronze_events
-WHERE event_date >= CURRENT_DATE() - INTERVAL 7 DAYS;
-
--- ❌ Filter late
-CREATE OR REPLACE STREAMING TABLE silver_all AS
-SELECT * FROM STREAM bronze_events;
-
-CREATE OR REPLACE MATERIALIZED VIEW gold_recent AS
-SELECT * FROM silver_all
-WHERE event_date >= CURRENT_DATE() - INTERVAL 7 DAYS;
-```
-
-### Select Specific Columns
-
-```sql
--- ❌ Reads all columns
-SELECT * FROM large_table;
-
--- ✅ Only needed columns
-SELECT customer_id, order_date, amount FROM large_table;
-```
-
-### Use GROUP BY Over DISTINCT
-
-```sql
--- ❌ Expensive on high-cardinality
-SELECT DISTINCT transaction_id FROM huge_table;
-
--- ✅ Better
-SELECT transaction_id, COUNT(*) FROM huge_table GROUP BY transaction_id;
-```
-
 ---
 
 ## Monitoring
-
-Track key metrics:
 
 ```sql
 -- Data freshness
@@ -455,7 +418,7 @@ GROUP BY table_name;
 
 | Issue | Solution |
 |-------|----------|
-| Pipeline running slowly | Check partitioning, state size, join patterns |
+| Pipeline running slowly | Check clustering, state size, join patterns |
 | High memory usage | Unbounded state - add time windows, reduce cardinality |
 | Many small files | Enable auto-optimize, run OPTIMIZE command |
 | Expensive queries on large tables | Add clustering, create filtered MVs |

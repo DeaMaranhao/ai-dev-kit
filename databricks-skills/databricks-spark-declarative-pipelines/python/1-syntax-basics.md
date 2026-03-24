@@ -1,8 +1,8 @@
-# Python API Reference (`pyspark.pipelines`)
+# Python Syntax Basics
+
+Core Python syntax for Spark Declarative Pipelines (SDP) using the modern `pyspark.pipelines` API.
 
 **Import**: `from pyspark import pipelines as dp`
-
-This is the modern Python API for Spark Declarative Pipelines. For migrating from legacy `dlt` API, see [6-dlt-migration.md](6-dlt-migration.md).
 
 ---
 
@@ -13,6 +13,9 @@ This is the modern Python API for Spark Declarative Pipelines. For migrating fro
 Creates a streaming table or batch table.
 
 ```python
+from pyspark import pipelines as dp
+from pyspark.sql import functions as F
+
 @dp.table(
     name="bronze_events",              # Table name (can be fully qualified: catalog.schema.table)
     comment="Raw event data",          # Optional description
@@ -31,12 +34,16 @@ def bronze_events():
 **Parameters:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `name` | str | Table name. Can be unqualified (`my_table`), partially qualified (`schema.table`), or fully qualified (`catalog.schema.table`). |
+| `name` | str | Table name. Can be unqualified (`my_table`), schema-qualified (`schema.table`), or fully qualified (`catalog.schema.table`). |
 | `comment` | str | Table description |
 | `cluster_by` | list | Columns for Liquid Clustering. Use `["AUTO"]` for automatic selection. |
 | `table_properties` | dict | Delta table properties |
 | `schema` | str/StructType | Explicit schema (optional, usually inferred) |
 | `path` | str | External storage location (optional) |
+
+**Streaming vs Batch:**
+- Return `spark.readStream...` for streaming table
+- Return `spark.read...` for batch table
 
 ### `@dp.materialized_view()`
 
@@ -125,11 +132,11 @@ dp.create_auto_cdc_flow(
     target="dim_customers",
     source="customers_cdc_clean",
     keys=["customer_id"],
-    sequence_by=col("event_timestamp"),
-    stored_as_scd_type=2,                    # Integer for Type 2, string "1" for Type 1
-    apply_as_deletes=col("operation") == "DELETE",  # Optional: condition for deletes
-    except_column_list=["operation", "_ingested_at"],  # Columns to exclude
-    track_history_column_list=["price", "status"]      # Type 2: only track these columns
+    sequence_by=col("event_timestamp"),              # Note: use col(), not string
+    stored_as_scd_type=2,                            # Integer for Type 2
+    apply_as_deletes=col("operation") == "DELETE",   # Optional
+    except_column_list=["operation", "_ingested_at"], # Columns to exclude
+    track_history_column_list=["price", "status"]    # Type 2: only track these
 )
 ```
 
@@ -139,12 +146,14 @@ dp.create_auto_cdc_flow(
 | `target` | str | Target table name |
 | `source` | str | Source table/view name |
 | `keys` | list | Primary key columns |
-| `sequence_by` | Column | Column for ordering changes (use `col()`) |
+| `sequence_by` | Column | Column for ordering changes (**use `col()`**) |
 | `stored_as_scd_type` | int/str | `2` for Type 2 (history), `"1"` for Type 1 (overwrite) |
 | `apply_as_deletes` | Column | Condition identifying delete operations |
 | `apply_as_truncates` | Column | Condition identifying truncate operations |
 | `except_column_list` | list | Columns to exclude from target |
 | `track_history_column_list` | list | Type 2 only: columns that trigger new versions |
+
+**Important:** `stored_as_scd_type` is integer `2` for Type 2, string `"1"` for Type 1.
 
 ### `dp.create_auto_cdc_from_snapshot_flow()`
 
@@ -225,7 +234,7 @@ df = spark.readStream.format("cloudFiles") \
 | Schema-qualified | `spark.read.table("other_schema.my_table")` | Different schema, same catalog |
 | Fully-qualified | `spark.read.table("other_catalog.schema.table")` | External catalogs |
 
-**Best practice:** Use unqualified names for pipeline-internal tables. Use `spark.conf.get()` for parameterized external references.
+**Best practice:** Use unqualified names for pipeline-internal tables.
 
 ---
 
@@ -256,15 +265,15 @@ def my_table():
 **Do NOT include these in dataset definitions:**
 
 ```python
-# ❌ WRONG - these cause unexpected behavior
+# These cause unexpected behavior
 @dp.table(name="bad_example")
 def bad_example():
     df = spark.read.table("source")
-    df.collect()           # ❌ No collect()
-    df.count()             # ❌ No count()
-    df.toPandas()          # ❌ No toPandas()
-    df.save(...)           # ❌ No save()
-    df.saveAsTable(...)    # ❌ No saveAsTable()
+    df.collect()           # No collect()
+    df.count()             # No count()
+    df.toPandas()          # No toPandas()
+    df.save(...)           # No save()
+    df.saveAsTable(...)    # No saveAsTable()
     return df
 ```
 
@@ -272,82 +281,12 @@ Dataset functions should only contain code to define the transformation, not exe
 
 ---
 
-## Complete Example
+## Common Issues
 
-```python
-from pyspark import pipelines as dp
-from pyspark.sql import functions as F
-
-# Configuration
-schema_location = spark.conf.get("schema_location_base")
-
-# Bronze: Ingest raw data
-@dp.table(
-    name="bronze_orders",
-    comment="Raw orders from cloud storage",
-    cluster_by=["order_date"]
-)
-def bronze_orders():
-    return (
-        spark.readStream.format("cloudFiles")
-        .option("cloudFiles.format", "json")
-        .option("cloudFiles.schemaLocation", f"{schema_location}/bronze_orders")
-        .load("/Volumes/my_catalog/my_schema/raw/orders/")
-        .withColumn("_ingested_at", F.current_timestamp())
-        .withColumn("_source_file", F.col("_metadata.file_path"))
-    )
-
-# Silver: Clean and validate
-@dp.table(
-    name="silver_orders",
-    comment="Cleaned orders",
-    cluster_by=["customer_id", "order_date"]
-)
-@dp.expect_or_drop("valid_amount", "amount > 0")
-@dp.expect_or_drop("valid_customer", "customer_id IS NOT NULL")
-def silver_orders():
-    return (
-        spark.readStream.table("bronze_orders")
-        .withColumn("amount", F.col("amount").cast("decimal(10,2)"))
-        .withColumn("order_date", F.to_date("order_timestamp"))
-        .select("order_id", "customer_id", "amount", "order_date", "_ingested_at")
-    )
-
-# Gold: Business aggregation
-@dp.materialized_view(
-    name="gold_daily_revenue",
-    comment="Daily revenue summary",
-    cluster_by=["order_date"]
-)
-def gold_daily_revenue():
-    return (
-        spark.read.table("silver_orders")
-        .groupBy("order_date")
-        .agg(
-            F.sum("amount").alias("total_revenue"),
-            F.count("order_id").alias("order_count"),
-            F.countDistinct("customer_id").alias("unique_customers")
-        )
-    )
-
-# SCD Type 2 dimension
-dp.create_streaming_table("dim_customers")
-
-dp.create_auto_cdc_flow(
-    target="dim_customers",
-    source="customers_cdc_clean",
-    keys=["customer_id"],
-    sequence_by=F.col("updated_at"),
-    stored_as_scd_type=2,
-    except_column_list=["_ingested_at", "_source_file"]
-)
-```
-
----
-
-## Related Documentation
-
-- **[1-ingestion-patterns.md](1-ingestion-patterns.md)** - Auto Loader, Kafka, file ingestion (SQL + Python)
-- **[6-dlt-migration.md](6-dlt-migration.md)** - Migrating from legacy `dlt` API or DLT Python to SDP
-- **[9-auto_cdc.md](9-auto_cdc.md)** - CDC patterns and SCD Type 1/2 details
-- **[Databricks Python API Docs](https://docs.databricks.com/aws/en/ldp/developer/python-ref)** - Official reference
+| Issue | Solution |
+|-------|----------|
+| `sequence_by` type error | Use `col("column")` not string in `create_auto_cdc_flow()` |
+| SCD type syntax error | Type 2 uses integer `2`, Type 1 uses string `"1"` |
+| Table not found | Check catalog/schema qualification or pipeline default settings |
+| Parameter not resolved | Use `spark.conf.get("param_name")` |
+| Actions in definition | Remove `collect()`, `count()`, `save()` from table functions |

@@ -1,0 +1,204 @@
+# SQL Syntax Basics
+
+Core SQL syntax for Spark Declarative Pipelines (SDP).
+
+---
+
+## Table Types
+
+### Streaming Table
+
+Processes data incrementally. Use for continuous ingestion and transformations.
+
+```sql
+CREATE OR REPLACE STREAMING TABLE bronze_events
+COMMENT 'Raw event data'
+CLUSTER BY (event_type, event_date)
+TBLPROPERTIES (
+  'delta.autoOptimize.optimizeWrite' = 'true',
+  'delta.autoOptimize.autoCompact' = 'true'
+)
+AS
+SELECT
+  *,
+  current_timestamp() AS _ingested_at
+FROM STREAM read_files('/Volumes/my_catalog/my_schema/raw/events/', format => 'json');
+```
+
+**Key points:**
+- Use `STREAM` keyword with source for incremental processing
+- `CLUSTER BY` enables Liquid Clustering (recommended over PARTITION BY)
+- Returns streaming DataFrame
+
+### Materialized View
+
+Batch table with automatic incremental refresh.
+
+```sql
+CREATE OR REPLACE MATERIALIZED VIEW gold_daily_summary
+COMMENT 'Daily aggregated metrics'
+CLUSTER BY (report_date)
+AS
+SELECT
+  report_date,
+  SUM(amount) AS total_amount,
+  COUNT(*) AS transaction_count
+FROM silver_orders
+GROUP BY report_date;
+```
+
+**Key points:**
+- No `STREAM` keyword - reads batch
+- Automatically refreshes incrementally when source changes
+- Use for aggregations and reporting tables
+
+### Temporary View
+
+Pipeline-scoped view, not persisted. Useful for intermediate transformations.
+
+```sql
+CREATE TEMPORARY VIEW orders_with_calculations AS
+SELECT
+  *,
+  quantity * price AS total,
+  quantity * price * discount_rate AS discount_amount
+FROM STREAM bronze_orders
+WHERE quantity > 0;
+```
+
+**Key points:**
+- Exists only during pipeline execution
+- No storage cost
+- Useful before AUTO CDC flows
+
+---
+
+## Data Quality (Expectations)
+
+### Constraint Syntax
+
+```sql
+CREATE OR REPLACE STREAMING TABLE silver_orders (
+  CONSTRAINT valid_amount EXPECT (amount > 0) ON VIOLATION DROP ROW,
+  CONSTRAINT valid_customer EXPECT (customer_id IS NOT NULL) ON VIOLATION DROP ROW,
+  CONSTRAINT critical_field EXPECT (order_id IS NOT NULL) ON VIOLATION FAIL UPDATE
+)
+AS
+SELECT * FROM STREAM bronze_orders;
+```
+
+| Violation Action | Behavior |
+|-----------------|----------|
+| `ON VIOLATION DROP ROW` | Drop rows that violate |
+| `ON VIOLATION FAIL UPDATE` | Fail pipeline if any row violates |
+| (no action) | Log warning, keep all rows |
+
+### WHERE Clause Alternative
+
+For simple filtering without tracking:
+
+```sql
+CREATE OR REPLACE STREAMING TABLE silver_orders AS
+SELECT * FROM STREAM bronze_orders
+WHERE amount > 0 AND customer_id IS NOT NULL;
+```
+
+---
+
+## Liquid Clustering
+
+Recommended over legacy PARTITION BY. Automatically optimizes data layout.
+
+```sql
+-- Manual cluster keys (recommended for known patterns)
+CREATE OR REPLACE STREAMING TABLE bronze_events
+CLUSTER BY (event_type, event_date)
+AS SELECT ...;
+
+-- Automatic cluster key selection
+CREATE OR REPLACE STREAMING TABLE bronze_events
+CLUSTER BY (AUTO)
+AS SELECT ...;
+```
+
+**Guidelines:**
+- First key: Most selective filter (e.g., customer_id)
+- Second key: Next common filter (e.g., date)
+- Limit to 4 keys
+- Use `AUTO` if unsure about query patterns
+
+---
+
+## Table Properties
+
+```sql
+CREATE OR REPLACE STREAMING TABLE bronze_events
+TBLPROPERTIES (
+  'delta.autoOptimize.optimizeWrite' = 'true',    -- Optimize file sizes on write
+  'delta.autoOptimize.autoCompact' = 'true',      -- Automatic compaction
+  'delta.enableChangeDataFeed' = 'true',          -- Enable CDF for downstream
+  'delta.logRetentionDuration' = '7 days',        -- Log retention
+  'delta.deletedFileRetentionDuration' = '7 days' -- Deleted file retention
+)
+AS SELECT ...;
+```
+
+---
+
+## Refresh Scheduling (Materialized Views)
+
+```sql
+-- Near-real-time
+CREATE OR REPLACE MATERIALIZED VIEW gold_live_metrics
+REFRESH EVERY 5 MINUTES
+AS SELECT ...;
+
+-- Daily
+CREATE OR REPLACE MATERIALIZED VIEW gold_daily_summary
+REFRESH EVERY 1 DAY
+AS SELECT ...;
+```
+
+---
+
+## Table Name Resolution
+
+| Level | Example | When to Use |
+|-------|---------|-------------|
+| Unqualified | `FROM bronze_orders` | Tables in same pipeline (recommended) |
+| Schema-qualified | `FROM other_schema.orders` | Different schema, same catalog |
+| Fully-qualified | `FROM other_catalog.schema.orders` | External catalogs |
+
+**Best practice:** Use unqualified names for pipeline-internal tables.
+
+---
+
+## Pipeline Parameters
+
+Reference configuration values in SQL:
+
+```sql
+-- In SQL, use ${variable_name} syntax
+CREATE OR REPLACE STREAMING TABLE bronze_orders AS
+SELECT * FROM STREAM read_files(
+  '${input_path}/orders/',
+  format => 'json'
+);
+```
+
+Define in pipeline configuration (YAML):
+```yaml
+configuration:
+  input_path: /Volumes/my_catalog/my_schema/raw
+```
+
+---
+
+## Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Missing `STREAM` keyword | Use `FROM STREAM table_name` for streaming tables |
+| Constraint syntax error | Use `CONSTRAINT name EXPECT (condition)` |
+| Cluster key not working | Verify column exists, limit to 4 keys |
+| Parameter not resolved | Check `${var}` syntax and pipeline configuration |
