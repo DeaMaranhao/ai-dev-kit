@@ -223,23 +223,32 @@ def stop_pipeline(pipeline_id: str) -> Dict[str, str]:
 def get_pipeline_events(
     pipeline_id: str,
     max_results: int = 5,
+    filter: str = "level='ERROR'",
+    update_id: str = None,
 ) -> List[Dict[str, Any]]:
     """
     Get pipeline events, issues, and error messages.
 
-    Use this to debug pipeline failures. Each event can contain detailed
-    stack traces, so a small default is used to avoid overwhelming output.
+    Use this to debug pipeline failures. By default returns only ERROR events
+    since those contain the failure details.
 
     Args:
         pipeline_id: Pipeline ID
-        max_results: Maximum number of events to return (default: 5).
-            Events include state transitions (INITIALIZING, RUNNING, FAILED)
-            and error details. Increase for longer history.
+        max_results: Maximum number of events to return (default: 5)
+        filter: SQL-like filter expression (default: "level='ERROR'").
+            Examples:
+            - "level='ERROR'" - only errors (default, best for debugging)
+            - "level in ('ERROR', 'WARN')" - errors and warnings
+            - "level='INFO'" - info events (state transitions)
+            - "" - all events (no filter)
+        update_id: Optional update ID to filter events. If provided, only
+            events from this specific update are returned. Get update IDs
+            from get_pipeline().latest_updates or start_update().
 
     Returns:
         List of event dictionaries with error details.
     """
-    events = _get_pipeline_events(pipeline_id=pipeline_id, max_results=max_results)
+    events = _get_pipeline_events(pipeline_id=pipeline_id, max_results=max_results, filter=filter, update_id=update_id)
     return [e.as_dict() if hasattr(e, "as_dict") else vars(e) for e in events]
 
 

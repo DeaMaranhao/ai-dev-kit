@@ -407,22 +407,51 @@ def stop_pipeline(pipeline_id: str) -> None:
     w.pipelines.stop(pipeline_id=pipeline_id)
 
 
-def get_pipeline_events(pipeline_id: str, max_results: int = 5) -> List[PipelineEvent]:
+def get_pipeline_events(
+    pipeline_id: str,
+    max_results: int = 5,
+    filter: str = "level='ERROR'",
+    update_id: str = None,
+) -> List[PipelineEvent]:
     """
     Get pipeline events, issues, and error messages.
 
-    Use this to debug pipeline failures. Each event can contain detailed
-    stack traces, so a small default is used to avoid overwhelming output.
+    Use this to debug pipeline failures. By default returns only ERROR events
+    since those contain the failure details. Each event can include full stack
+    traces, so output can be verbose.
 
     Args:
         pipeline_id: Pipeline ID
         max_results: Maximum number of events to return (default: 5)
+        filter: SQL-like filter expression (default: "level='ERROR'").
+            Examples:
+            - "level='ERROR'" - only errors (default)
+            - "level in ('ERROR', 'WARN')" - errors and warnings
+            - "level='INFO'" - info events (state transitions)
+            - None or "" - all events (no filter)
+        update_id: Optional update ID to filter events. If provided, only
+            events from this specific update are returned. Get update IDs
+            from get_pipeline().latest_updates or start_update().
 
     Returns:
         List of PipelineEvent objects with error details
     """
     w = get_workspace_client()
-    events = w.pipelines.list_pipeline_events(pipeline_id=pipeline_id, max_results=max_results)
+
+    # Build filter expression, optionally including update_id
+    effective_filter = filter if filter else None
+    if update_id:
+        update_filter = f"origin.update_id = '{update_id}'"
+        if effective_filter:
+            effective_filter = f"({effective_filter}) AND {update_filter}"
+        else:
+            effective_filter = update_filter
+
+    events = w.pipelines.list_pipeline_events(
+        pipeline_id=pipeline_id,
+        max_results=max_results,
+        filter=effective_filter,
+    )
     return list(events)
 
 
