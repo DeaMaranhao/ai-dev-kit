@@ -5,7 +5,6 @@ Note: AI/BI dashboards were previously known as Lakeview dashboards.
 The SDK/API still uses the 'lakeview' name internally.
 """
 
-import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional, Union
@@ -260,110 +259,13 @@ def unpublish_dashboard(dashboard_id: str) -> Dict[str, str]:
     }
 
 
-async def deploy_dashboard(
-    dashboard_content: str,
-    install_path: str,
-    dashboard_name: str,
-    warehouse_id: str,
-) -> DashboardDeploymentResult:
-    """Deploy a dashboard to Databricks workspace using Lakeview API.
-
-    This is a high-level function that handles create-or-update logic:
-    - Checks if a dashboard exists at the path
-    - Creates new or updates existing dashboard
-    - Publishes the dashboard
-
-    Args:
-        dashboard_content: Dashboard JSON content as string
-        install_path: Workspace folder path (e.g., /Workspace/Users/me/dashboards)
-        dashboard_name: Display name for the dashboard
-        warehouse_id: SQL warehouse ID
-
-    Returns:
-        DashboardDeploymentResult with deployment status and details
-    """
-    from databricks.sdk.errors.platform import ResourceDoesNotExist
-
-    w = get_workspace_client()
-    dashboard_path = f"{install_path}/{dashboard_name}.lvdash.json"
-
-    try:
-        # Ensure the parent directory exists
-        try:
-            await asyncio.to_thread(w.workspace.mkdirs, install_path)
-        except Exception as e:
-            logger.debug(f"Directory creation check: {install_path} - {e}")
-
-        # Check if dashboard already exists at path
-        existing_dashboard_id = None
-        try:
-            existing = await asyncio.to_thread(w.workspace.get_status, path=dashboard_path)
-            existing_dashboard_id = existing.resource_id
-        except ResourceDoesNotExist:
-            pass
-
-        dashboard = Dashboard(
-            display_name=dashboard_name,
-            warehouse_id=warehouse_id,
-            parent_path=install_path,
-            serialized_dashboard=dashboard_content,
-        )
-
-        # Update or create
-        if existing_dashboard_id:
-            try:
-                logger.info(f"Updating existing dashboard: {dashboard_name}")
-                updated = w.lakeview.update(dashboard_id=existing_dashboard_id, dashboard=dashboard)
-                dashboard_id = updated.dashboard_id
-                status = "updated"
-            except Exception as e:
-                logger.warning(f"Failed to update dashboard {existing_dashboard_id}: {e}. Creating new.")
-                created = w.lakeview.create(dashboard=dashboard)
-                dashboard_id = created.dashboard_id
-                status = "created"
-        else:
-            logger.info(f"Creating new dashboard: {dashboard_name}")
-            created = w.lakeview.create(dashboard=dashboard)
-            dashboard_id = created.dashboard_id
-            status = "created"
-
-        dashboard_url = f"{w.config.host}/sql/dashboardsv3/{dashboard_id}"
-
-        # Publish (best-effort)
-        try:
-            w.lakeview.publish(
-                dashboard_id=dashboard_id,
-                warehouse_id=warehouse_id,
-                embed_credentials=True,
-            )
-            logger.info(f"Dashboard {dashboard_id} published successfully")
-        except Exception as e:
-            logger.warning(f"Failed to publish dashboard {dashboard_id}: {e}")
-
-        return DashboardDeploymentResult(
-            success=True,
-            status=status,
-            dashboard_id=dashboard_id,
-            path=dashboard_path,
-            url=dashboard_url,
-        )
-
-    except Exception as e:
-        logger.error(f"Dashboard deployment failed: {e}", exc_info=True)
-        return DashboardDeploymentResult(
-            success=False,
-            error=str(e),
-            path=dashboard_path,
-        )
-
-
-def deploy_dashboard_sync(
+def deploy_dashboard(
     dashboard_content: Union[str, dict],
     install_path: str,
     dashboard_name: str,
     warehouse_id: str,
 ) -> DashboardDeploymentResult:
-    """Deploy a dashboard to Databricks workspace (synchronous version).
+    """Deploy a dashboard to Databricks workspace.
 
     This is a high-level function that handles create-or-update logic:
     - Checks if a dashboard exists at the path
@@ -465,7 +367,7 @@ def create_or_update_dashboard(
     warehouse_id: str,
     publish: bool = True,
 ) -> Dict[str, Any]:
-    """Create or update a dashboard (synchronous version).
+    """Create or update a dashboard.
 
     This is a convenience function that:
     1. Checks if a dashboard exists at the path
@@ -487,7 +389,7 @@ def create_or_update_dashboard(
         - url: Dashboard URL
         - published: Whether dashboard was published
     """
-    result = deploy_dashboard_sync(
+    result = deploy_dashboard(
         dashboard_content=serialized_dashboard,
         install_path=parent_path,
         dashboard_name=display_name,

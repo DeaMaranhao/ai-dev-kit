@@ -161,7 +161,7 @@ y=12: Table (w=6, h=6) - Detailed data
 2. If too many distinct values for a readable chart, you MUST either:
    - Aggregate to a higher abstraction level (region instead of store, tier instead of customer_id)
    - Use TOP-N + "Other" bucketing in the dataset SQL: use `ROW_NUMBER()` to rank, then `CASE WHEN rn <= N THEN dimension ELSE 'Other' END` to bucket remaining values together
-   - Use a table widget instead of a chart
+   - Use a table widget instead of a chart (not ideal)
 3. **A chart with too many categories is useless** - users can't read or compare anything. Adapt the number of categories based on the chart type to keep it readable.
 
 ### 6) QUALITY CHECKLIST
