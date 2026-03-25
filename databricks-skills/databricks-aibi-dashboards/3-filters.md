@@ -110,7 +110,7 @@ Place on a dedicated filter page:
 
 ## Page-Level Filter Example
 
-Place directly on a canvas page (affects only that page):
+Place filter widget directly on a `PAGE_TYPE_CANVAS` page (same widget structure as global filter, but only affects that page):
 
 ```json
 {
@@ -118,195 +118,64 @@ Place directly on a canvas page (affects only that page):
   "displayName": "Platform Breakdown",
   "pageType": "PAGE_TYPE_CANVAS",
   "layout": [
-    {
-      "widget": {
-        "name": "page-title",
-        "multilineTextboxSpec": {"lines": ["## Platform Breakdown"]}
-      },
-      "position": {"x": 0, "y": 0, "width": 4, "height": 1}
-    },
+    {"widget": {...}, "position": {...}},
     {
       "widget": {
         "name": "filter_platform",
-        "queries": [{
-          "name": "ds_platform",
-          "query": {
-            "datasetName": "platform_data",
-            "fields": [{"name": "platform", "expression": "`platform`"}],
-            "disaggregated": false
-          }
-        }],
+        "queries": [{"name": "ds_platform", "query": {"datasetName": "platform_data", "fields": [{"name": "platform", "expression": "`platform`"}], "disaggregated": false}}],
         "spec": {
           "version": 2,
           "widgetType": "filter-multi-select",
-          "encodings": {
-            "fields": [{
-              "fieldName": "platform",
-              "displayName": "Platform",
-              "queryName": "ds_platform"
-            }]
-          },
+          "encodings": {"fields": [{"fieldName": "platform", "displayName": "Platform", "queryName": "ds_platform"}]},
           "frame": {"showTitle": true, "title": "Platform"}
         }
       },
       "position": {"x": 4, "y": 0, "width": 2, "height": 2}
     }
-    // ... other widgets on this page
   ]
 }
 ```
 
 ---
 
-## Date Range Filtering (IMPORTANT)
+## Date Range Filtering
 
-> **Best Practice**: Most dashboards should include a date range filter on datasets with time-based data.
-> This allows users to focus on relevant time periods. However, be thoughtful about which datasets
-> should be filtered - metrics like "All-Time Total" or "MRR" should NOT be date-filtered.
+> **Best Practice**: Most dashboards should include a date range filter. However, metrics that are not based on a time range (like "MRR" or "All-Time Total") should NOT be date-filtered - omit them from the filter's queries.
 
-There are **two approaches** to date range filtering:
+**Two binding approaches** (can be combined in one filter):
+- **Field-based**: Bind to a date column in SELECT → filter auto-applies `IN_RANGE()`
+- **Parameter-based**: Use `:param.min`/`:param.max` in WHERE clause for pre-aggregation filtering
 
-### Approach 1: Field-Based Filtering (Automatic)
-
-When your dataset has a date column, the filter automatically applies `IN_RANGE()` to that field.
-This is the simplest approach when the date field is directly in the SELECT.
-
-**Dataset** (date field in output):
 ```json
-{
-  "name": "weekly_trend",
-  "displayName": "Weekly Trend",
-  "queryLines": [
-    "SELECT week_start, revenue_usd, returns_usd ",
-    "FROM catalog.schema.weekly_summary ",
-    "ORDER BY week_start"
-  ]
-}
-```
-
-**Filter widget** (binds to field):
-```json
-{
-  "widget": {
-    "name": "date_range_filter",
-    "queries": [{
-      "name": "ds_weekly_trend_date",
-      "query": {
-        "datasetName": "weekly_trend",
-        "fields": [{"name": "week_start", "expression": "`week_start`"}],
-        "disaggregated": false
-      }
-    }],
-    "spec": {
-      "version": 2,
-      "widgetType": "filter-date-range-picker",
-      "encodings": {
-        "fields": [{
-          "fieldName": "week_start",
-          "queryName": "ds_weekly_trend_date"
-        }]
-      },
-      "frame": {"showTitle": true, "title": "Date Range"}
-    }
-  },
-  "position": {"x": 0, "y": 0, "width": 2, "height": 2}
-}
-```
-
-### Approach 2: Parameter-Based Filtering (Explicit Control)
-
-When you need the date range in a WHERE clause (e.g., filtering before aggregation),
-use SQL parameters with `:param_name.min` and `:param_name.max` syntax.
-
-**Dataset** (with parameter in WHERE clause):
-```json
+// Dataset with parameter (for aggregated queries)
 {
   "name": "revenue_by_category",
-  "displayName": "Revenue by Category",
   "queryLines": [
-    "SELECT category, SUM(revenue_usd) as revenue ",
-    "FROM catalog.schema.daily_orders ",
+    "SELECT category, SUM(revenue) as revenue FROM catalog.schema.orders ",
     "WHERE order_date BETWEEN :date_range.min AND :date_range.max ",
-    "GROUP BY category ORDER BY revenue DESC"
+    "GROUP BY category"
   ],
   "parameters": [{
-    "displayName": "date_range",
-    "keyword": "date_range",
-    "dataType": "DATE",
-    "complexType": "RANGE",
-    "defaultSelection": {
-      "range": {
-        "dataType": "DATE",
-        "min": {"value": "now-12M/M"},
-        "max": {"value": "now/M"}
-      }
-    }
+    "keyword": "date_range", "dataType": "DATE", "complexType": "RANGE",
+    "defaultSelection": {"range": {"dataType": "DATE", "min": {"value": "now-12M/M"}, "max": {"value": "now/M"}}}
   }]
 }
-```
 
-**Filter widget** (binds to parameter):
-```json
-{
-  "widget": {
-    "name": "date_range_filter",
-    "queries": [{
-      "name": "ds_revenue_date_param",
-      "query": {
-        "datasetName": "revenue_by_category",
-        "parameters": [{"name": "date_range", "keyword": "date_range"}],
-        "disaggregated": false
-      }
-    }],
-    "spec": {
-      "version": 2,
-      "widgetType": "filter-date-range-picker",
-      "encodings": {
-        "fields": [{
-          "parameterName": "date_range",
-          "queryName": "ds_revenue_date_param"
-        }]
-      },
-      "frame": {"showTitle": true, "title": "Date Range"}
-    }
-  },
-  "position": {"x": 0, "y": 0, "width": 2, "height": 2}
-}
-```
-
-### Combining Both Approaches
-
-A single date range filter can bind to multiple datasets using different approaches:
-
-```json
+// Filter widget binding to both field and parameter
 {
   "widget": {
     "name": "date_range_filter",
     "queries": [
-      {
-        "name": "ds_trend_field",
-        "query": {
-          "datasetName": "weekly_trend",
-          "fields": [{"name": "week_start", "expression": "`week_start`"}],
-          "disaggregated": false
-        }
-      },
-      {
-        "name": "ds_category_param",
-        "query": {
-          "datasetName": "revenue_by_category",
-          "parameters": [{"name": "date_range", "keyword": "date_range"}],
-          "disaggregated": false
-        }
-      }
+      {"name": "q_trend", "query": {"datasetName": "weekly_trend", "fields": [{"name": "week_start", "expression": "`week_start`"}], "disaggregated": false}},
+      {"name": "q_category", "query": {"datasetName": "revenue_by_category", "parameters": [{"name": "date_range", "keyword": "date_range"}], "disaggregated": false}}
     ],
     "spec": {
       "version": 2,
       "widgetType": "filter-date-range-picker",
       "encodings": {
         "fields": [
-          {"fieldName": "week_start", "queryName": "ds_trend_field"},
-          {"parameterName": "date_range", "queryName": "ds_category_param"}
+          {"fieldName": "week_start", "queryName": "q_trend"},
+          {"parameterName": "date_range", "queryName": "q_category"}
         ]
       },
       "frame": {"showTitle": true, "title": "Date Range"}
@@ -315,18 +184,6 @@ A single date range filter can bind to multiple datasets using different approac
   "position": {"x": 0, "y": 0, "width": 2, "height": 2}
 }
 ```
-
-### When NOT to Apply Date Filtering
-
-Some metrics should NOT be filtered by date:
-- **MRR/ARR**: Monthly/Annual recurring revenue is a point-in-time metric
-- **All-Time Totals**: Cumulative metrics since inception
-- **YTD Comparisons**: When comparing year-to-date against prior year
-- **Fixed Snapshots**: "As of" metrics for a specific date
-
-For these, either:
-1. Don't bind them to the date filter (omit from filter queries)
-2. Use a separate dataset not connected to the date range filter
 
 ---
 

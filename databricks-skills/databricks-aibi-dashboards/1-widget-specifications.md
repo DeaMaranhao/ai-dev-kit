@@ -1,69 +1,48 @@
 # Widget Specifications
 
-Detailed JSON patterns for each AI/BI dashboard widget type.
+Core widget types for AI/BI dashboards. For advanced visualizations (area, scatter, choropleth map, combo), see [2-advanced-widget-specifications.md](2-advanced-widget-specifications.md).
 
-## Widget Naming Convention (CRITICAL)
+## Widget Naming and Display
 
-- `widget.name`: alphanumeric + hyphens + underscores ONLY (no spaces, parentheses, colons)
-  - **Maximum 60 characters** - longer names cause validation errors
-- `frame.title`: human-readable name (any characters allowed)
-- `widget.queries[0].name`: always use `"main_query"`
+- `widget.name`: alphanumeric + hyphens + underscores ONLY (max 60 characters)
+- `frame.title`: human-readable title (any characters allowed)
+- `frame.showTitle`: always set to `true` so users understand the widget
+- `displayName`: use in encodings to label axes/values clearly (e.g., "Revenue ($)", "Growth Rate (%)")
+- `widget.queries[].name`: use `"main_query"` for chart/counter/table widgets. Filter widgets with multiple queries can use descriptive names (see [3-filters.md](3-filters.md))
+
+**Always format values appropriately** - use `format` for currency, percentages, and large numbers (see [Axis Formatting](#axis-formatting)).
 
 ## Version Requirements
 
-| Widget Type | Version |
-|-------------|---------|
-| counter | 2 |
-| table | 2 |
-| filter-multi-select | 2 |
-| filter-single-select | 2 |
-| filter-date-range-picker | 2 |
-| bar | 3 |
-| line | 3 |
-| pie | 3 |
-| combo | 1 |
-| text | N/A (no spec block) |
+| Widget Type | Version | File |
+|-------------|---------|------|
+| text | N/A | this file |
+| counter | 2 | this file |
+| table | 2 | this file |
+| bar | 3 | this file |
+| line | 3 | this file |
+| pie | 3 | this file |
+| area | 3 | [2-advanced-widget-specifications.md](2-advanced-widget-specifications.md) |
+| scatter | 3 | [2-advanced-widget-specifications.md](2-advanced-widget-specifications.md) |
+| combo | 1 | [2-advanced-widget-specifications.md](2-advanced-widget-specifications.md) |
+| choropleth-map | 1 | [2-advanced-widget-specifications.md](2-advanced-widget-specifications.md) |
+| filter-* | 2 | [3-filters.md](3-filters.md) |
 
 ---
 
 ## Text (Headers/Descriptions)
 
-- **CRITICAL: Text widgets do NOT use a spec block!**
-- Use `multilineTextboxSpec` directly on the widget
+- **Text widgets do NOT use a spec block** - use `multilineTextboxSpec` directly
 - Supports markdown: `#`, `##`, `###`, `**bold**`, `*italic*`
-- **CRITICAL: Multiple items in the `lines` array are concatenated on a single line, NOT displayed as separate lines!**
-- For title + subtitle, use **separate text widgets** at different y positions
+- Multiple items in `lines` array concatenate on one line - use **separate widgets** for title/subtitle
 
 ```json
-// CORRECT: Separate widgets for title and subtitle
 {
   "widget": {
     "name": "title",
-    "multilineTextboxSpec": {
-      "lines": ["## Dashboard Title"]
-    }
+    "multilineTextboxSpec": {"lines": ["## Dashboard Title"]}
   },
   "position": {"x": 0, "y": 0, "width": 6, "height": 1}
-},
-{
-  "widget": {
-    "name": "subtitle",
-    "multilineTextboxSpec": {
-      "lines": ["Description text here"]
-    }
-  },
-  "position": {"x": 0, "y": 1, "width": 6, "height": 1}
-}
-
-// WRONG: Multiple lines concatenate into one line!
-{
-  "widget": {
-    "name": "title-widget",
-    "multilineTextboxSpec": {
-      "lines": ["## Dashboard Title", "Description text here"]  // Becomes "## Dashboard TitleDescription text here"
-    }
-  },
-  "position": {"x": 0, "y": 0, "width": 6, "height": 2}
 }
 ```
 
@@ -71,16 +50,13 @@ Detailed JSON patterns for each AI/BI dashboard widget type.
 
 ## Counter (KPI)
 
-- `version`: **2** (NOT 3!)
+- `version`: **2**
 - `widgetType`: "counter"
-- **Percent values must be 0-1** in the data (not 0-100)
+- Percent values must be 0-1 in the data (not 0-100)
 
 ### Number Formatting
 
-Use the `format` property in `encodings.value` to control display:
-
 ```json
-// Currency - displays "$1.2M" instead of "1234567"
 "encodings": {
   "value": {
     "fieldName": "revenue",
@@ -93,39 +69,13 @@ Use the `format` property in `encodings.value` to control display:
     }
   }
 }
-
-// Percent - displays "45.2%" (data must be 0-1)
-"encodings": {
-  "value": {
-    "fieldName": "conversion_rate",
-    "displayName": "Conversion Rate",
-    "format": {
-      "type": "number-percent",
-      "decimalPlaces": {"type": "max", "places": 1}
-    }
-  }
-}
-
-// Plain number with formatting
-"encodings": {
-  "value": {
-    "fieldName": "order_count",
-    "displayName": "Orders",
-    "format": {
-      "type": "number",
-      "decimalPlaces": {"type": "max", "places": 0}
-    }
-  }
-}
 ```
 
-**Two patterns for counters:**
+Format types: `number`, `number-currency`, `number-percent`
 
-**Pattern 1: Pre-aggregated dataset (1 row, no filters)**
-- Dataset returns exactly 1 row
-- Use `"disaggregated": true` and simple field reference
-- Field `name` matches dataset column directly
+### Counter Patterns
 
+**Pre-aggregated dataset (1 row)** - use `disaggregated: true`:
 ```json
 {
   "widget": {
@@ -151,44 +101,21 @@ Use the `format` property in `encodings.value` to control display:
 }
 ```
 
-**Pattern 2: Aggregating widget (multi-row dataset, supports filters)**
-- Dataset returns multiple rows (e.g., grouped by a filter dimension)
-- Use `"disaggregated": false` and aggregation expression
-- **CRITICAL**: Field `name` MUST match `fieldName` exactly (e.g., `"sum(spend)"`)
-
+**Multi-row dataset with aggregation** - use `disaggregated: false`:
 ```json
-{
-  "widget": {
-    "name": "total-spend",
-    "queries": [{
-      "name": "main_query",
-      "query": {
-        "datasetName": "by_category",
-        "fields": [{"name": "sum(spend)", "expression": "SUM(`spend`)"}],
-        "disaggregated": false
-      }
-    }],
-    "spec": {
-      "version": 2,
-      "widgetType": "counter",
-      "encodings": {
-        "value": {"fieldName": "sum(spend)", "displayName": "Total Spend"}
-      },
-      "frame": {"showTitle": true, "title": "Total Spend"}
-    }
-  },
-  "position": {"x": 0, "y": 0, "width": 2, "height": 3}
-}
+"fields": [{"name": "sum(spend)", "expression": "SUM(`spend`)"}],
+"disaggregated": false
+// encodings.value.fieldName must match: "sum(spend)"
 ```
 
 ---
 
 ## Table
 
-- `version`: **2** (NOT 1 or 3!)
+- `version`: **2**
 - `widgetType`: "table"
-- **Columns only need `fieldName` and `displayName`** - no other properties!
-- Use `"disaggregated": true` for raw rows
+- Columns only need `fieldName` and `displayName`
+- Default sort: use `ORDER BY` in dataset SQL
 
 ```json
 {
@@ -227,13 +154,11 @@ Use the `format` property in `encodings.value` to control display:
 
 - `version`: **3**
 - `widgetType`: "line" or "bar"
-- Use `x`, `y`, optional `color` encodings
 - `scale.type`: `"temporal"` (dates), `"quantitative"` (numbers), `"categorical"` (strings)
-- Use `"disaggregated": true` with pre-aggregated dataset data
 
-**Multiple Lines - Two Approaches:**
+**Multiple series - two approaches:**
 
-1. **Multi-Y Fields** (different metrics on same chart):
+1. **Multi-Y Fields** (different metrics):
 ```json
 "y": {
   "scale": {"type": "quantitative"},
@@ -247,130 +172,123 @@ Use the `format` property in `encodings.value` to control display:
 2. **Color Grouping** (same metric split by dimension):
 ```json
 "y": {"fieldName": "sum(revenue)", "scale": {"type": "quantitative"}},
-"color": {"fieldName": "region", "scale": {"type": "categorical"}, "displayName": "Region"}
+"color": {"fieldName": "region", "scale": {"type": "categorical"}}
 ```
-
-### Color Encoding
-
-**Two types of color scales:**
-
-1. **Categorical** (discrete colors for groups):
-```json
-"color": {"fieldName": "priority", "scale": {"type": "categorical"}, "displayName": "Priority"}
-```
-
-2. **Quantitative** (gradient based on numeric value - for heatmap-style effects):
-```json
-"color": {"fieldName": "sum(revenue)", "scale": {"type": "quantitative"}, "displayName": "Revenue"}
-```
-
-> **CRITICAL**: Color scale for bar/line/area/scatter/pie ONLY supports these properties:
-> - `type`: required ("categorical", "quantitative", or "temporal")
-> - `sort`: optional
->
-> **DO NOT** add `scheme`, `colorRamp`, or `mappings` - these only work for choropleth-map widgets and will cause errors on other chart types.
 
 ### Bar Chart Modes
 
-Choose based on your visualization goal:
+| Mode | Configuration |
+|------|---------------|
+| Stacked (default) | No `mark` field |
+| Grouped | `"mark": {"layout": "group"}` |
 
-| Mode | When to Use | Configuration |
-|------|-------------|---------------|
-| **Stacked** (default) | Show total + composition breakdown | No `mark` field |
-| **Grouped** | Compare values across categories side-by-side | Add `"mark": {"layout": "group"}` |
+### Horizontal Bar Chart
 
-**Stacked mode** (default - bars stack on top of each other):
+Swap `x` and `y` - put quantitative on `x`, categorical/temporal on `y`:
 ```json
-"spec": {
-  "version": 3,
-  "widgetType": "bar",
-  "encodings": {
-    "x": {"fieldName": "daily(date)", "scale": {"type": "temporal"}},
-    "y": {"fieldName": "sum(revenue)", "scale": {"type": "quantitative"}},
-    "color": {"fieldName": "region", "scale": {"type": "categorical"}}
-  }
-  // No "mark" field = stacked
+"encodings": {
+  "x": {"scale": {"type": "quantitative"}, "fields": [...]},
+  "y": {"fieldName": "category", "scale": {"type": "categorical"}}
 }
 ```
 
-**Grouped mode** (bars side-by-side for comparison):
-```json
-"spec": {
-  "version": 3,
-  "widgetType": "bar",
-  "encodings": {
-    "x": {"fieldName": "category", "scale": {"type": "categorical"}},
-    "y": {"fieldName": "sum(revenue)", "scale": {"type": "quantitative"}},
-    "color": {"fieldName": "region", "scale": {"type": "categorical"}}
-  },
-  "mark": {"layout": "group"}
-}
-```
+### Color Scale
 
-> **Tip**: For grouped bars with a time series X-axis, use weekly or monthly aggregation (`DATE_TRUNC("WEEK", date)`) for readability instead of daily.
+> **CRITICAL**: For bar/line/pie, color scale ONLY supports `type` and `sort`.
+> Do NOT use `scheme`, `colorRamp`, or `mappings` (only for choropleth-map).
+
+---
 
 ## Pie Chart
 
 - `version`: **3**
 - `widgetType`: "pie"
-- `angle`: quantitative aggregate
+- `angle`: quantitative field
 - `color`: categorical dimension
-- Limit to 3-8 categories for readability
+
+```json
+"spec": {
+  "version": 3,
+  "widgetType": "pie",
+  "encodings": {
+    "angle": {"fieldName": "revenue", "scale": {"type": "quantitative"}},
+    "color": {"fieldName": "category", "scale": {"type": "categorical"}}
+  }
+}
+```
 
 ---
 
-## Combo Chart (Bar + Line)
+## Axis Formatting
 
-Combo charts display two visualization types on the same widget - bars for one metric and a line for another. Useful for showing related metrics with different representations (e.g., revenue as bars + growth rate as a line).
+Add `format` to any encoding to display values appropriately:
 
-- `version`: **1**
-- `widgetType`: "combo"
-- `y.primary`: bar chart fields
-- `y.secondary`: line chart fields
-- **Important**: Both primary and secondary should have similar scales since they share the Y-axis
+| Data Type | Format Type | Example |
+|-----------|-------------|---------|
+| Currency | `number-currency` | $1.2M |
+| Percentage | `number-percent` | 45.2% (data must be 0-1, not 0-100) |
+| Large numbers | `number` with `abbreviation` | 1.5K, 2.3M |
+
+```json
+"value": {
+  "fieldName": "revenue",
+  "displayName": "Revenue",
+  "format": {
+    "type": "number-currency",
+    "currencyCode": "USD",
+    "abbreviation": "compact",
+    "decimalPlaces": {"type": "max", "places": 2}
+  }
+}
+```
+
+**Options:**
+- `abbreviation`: `"compact"` (K/M/B) or omit for full numbers
+- `decimalPlaces`: `{"type": "max", "places": N}` or `{"type": "fixed", "places": N}`
+
+---
+
+## Dataset Parameters
+
+Use `:param` syntax in SQL for dynamic filtering:
 
 ```json
 {
-  "widget": {
-    "name": "revenue-and-growth",
-    "queries": [{
-      "name": "main_query",
-      "query": {
-        "datasetName": "metrics_ds",
-        "fields": [
-          {"name": "daily(date)", "expression": "DATE_TRUNC(\"DAY\", `date`)"},
-          {"name": "sum(revenue)", "expression": "SUM(`revenue`)"},
-          {"name": "avg(growth_rate)", "expression": "AVG(`growth_rate`)"}
-        ],
-        "disaggregated": false
-      }
-    }],
-    "spec": {
-      "version": 1,
-      "widgetType": "combo",
-      "encodings": {
-        "x": {
-          "fieldName": "daily(date)",
-          "scale": {"type": "temporal"}
-        },
-        "y": {
-          "scale": {"type": "quantitative"},
-          "primary": {
-            "fields": [
-              {"fieldName": "sum(revenue)", "displayName": "Revenue ($)"}
-            ]
-          },
-          "secondary": {
-            "fields": [
-              {"fieldName": "avg(growth_rate)", "displayName": "Growth Rate"}
-            ]
-          }
-        },
-        "label": {"show": false}
-      },
-      "frame": {"title": "Revenue & Growth Rate", "showTitle": true}
-    }
-  },
-  "position": {"x": 0, "y": 0, "width": 6, "height": 5}
+  "name": "revenue_by_category",
+  "queryLines": ["SELECT ... WHERE returns_usd > :threshold GROUP BY category"],
+  "parameters": [{
+    "keyword": "threshold",
+    "dataType": "INTEGER",
+    "defaultSelection": {}
+  }]
 }
 ```
+
+**Parameter types:**
+- Single value: `"dataType": "INTEGER"` / `"DECIMAL"` / `"STRING"`
+- Multi-select: Add `"complexType": "MULTI"`
+- Range: `"dataType": "DATE", "complexType": "RANGE"` - use `:param.min` / `:param.max`
+
+---
+
+## Widget Field Expressions
+
+Allowed in `query.fields` (no CAST or complex SQL):
+
+```json
+// Aggregations
+{"name": "sum(revenue)", "expression": "SUM(`revenue`)"}
+{"name": "avg(price)", "expression": "AVG(`price`)"}
+{"name": "count(id)", "expression": "COUNT(`id`)"}
+{"name": "countdistinct(id)", "expression": "COUNT(DISTINCT `id`)"}
+
+// Date truncation
+{"name": "daily(date)", "expression": "DATE_TRUNC(\"DAY\", `date`)"}
+{"name": "weekly(date)", "expression": "DATE_TRUNC(\"WEEK\", `date`)"}
+{"name": "monthly(date)", "expression": "DATE_TRUNC(\"MONTH\", `date`)"}
+
+// Simple reference
+{"name": "category", "expression": "`category`"}
+```
+
+For conditional logic, compute in dataset SQL instead.
