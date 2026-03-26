@@ -100,15 +100,12 @@ Use this when you need to **quickly create, test, and iterate** on a pipeline wi
 Before writing pipeline code, make sure you have:
 ```
 - [ ] Language selected: Python or SQL
+- [ ] Read the syntax basics: **SQL**: Always Read [sql/1-syntax-basics.md](references/sql/1-syntax-basics.md), **Python**: Always Read [python/1-syntax-basics.md](references/python/1-syntax-basics.md)
 - [ ] Workflow chosen: Standalone DAB / Existing DAB / MCP iteration
 - [ ] Compute type: serverless (default) or classic
 - [ ] Schema strategy: single schema with prefixes vs. multi-schema
 - [ ] Consider [Multi-Schema Patterns](#multi-schema-patterns) and [Modern Defaults](#modern-defaults)
 ```
-
-**After selecting language, read the syntax basics:**
-- **SQL**: Always Read [sql/1-syntax-basics.md](references/sql/1-syntax-basics.md)
-- **Python**: Always Read [python/1-syntax-basics.md](references/python/1-syntax-basics.md)
 
 **Then read additional guides based on what the pipeline needs, when you need it:**
 | If the pipeline needs... | Read |
@@ -129,8 +126,18 @@ Before writing pipeline code, make sure you have:
 | **SQL Syntax** | `CREATE OR REFRESH STREAMING TABLE`, `CREATE OR REFRESH MATERIALIZED VIEW` |
 | **Python Import** | `from pyspark import pipelines as dp` |
 | **Primary Decorators** | `@dp.table()`, `@dp.materialized_view()`, `@dp.temporary_view()` |
-| **Replaces** | Delta Live Tables (DLT) with `import dlt` |
-| **Docs** | https://docs.databricks.com/aws/en/ldp/developer/python-dev |
+
+### Legacy APIs (Do NOT Use)
+
+| Legacy | Modern Replacement |
+|--------|-------------------|
+| `import dlt` | `from pyspark import pipelines as dp` |
+| `dlt.apply_changes()` | `dp.create_auto_cdc_flow()` |
+| `dlt.read()` / `dlt.read_stream()` | `spark.read` / `spark.readStream` |
+| `CREATE LIVE XXX` | `CREATE OR REFRESH STREAMING TABLE\|MATERIALIZED VIEW` |
+| `PARTITION BY` + `ZORDER` | `CLUSTER BY` (Liquid Clustering) |
+| `input_file_name()` | `_metadata.file_path` |
+| `target` parameter | `schema` parameter |
 
 ---
 
@@ -177,42 +184,19 @@ After choosing your workflow (see [Choose Your Workflow](#choose-your-workflow))
 - **[Change Data Capture (CDC)](https://docs.databricks.com/aws/en/ldp/cdc)** - AUTO CDC, SCD Type 1/2
 
 
-### Medallion Architecture Pattern                                                                                                                                                            
-  **Bronze Layer (Raw)**                                                                                                                                                                                                             
-  - Raw data ingested from sources in original format                                                                                                                                                                                
-  - Minimal transformations (append-only, add metadata like `_ingested_at`, `_source_file`)                                                                                                                                          
-  - Single source of truth preserving data lineage                                                                                                                                                                                   
-                                                                                                                                                                                                                                     
-  **Silver Layer (Validated)**
-  - Cleaned and validated data.
-  - Might deduplicate here with auto_cdc, but often wait until the final step for auto_cdc if possible.
-  - Business logic applied (type casting, quality checks, filtering invalid records)
-  - **Standardize data types**: Use `DECIMAL(precision, scale)` for monetary/financial values (not DOUBLE/FLOAT which have precision issues), or store as INTEGER cents. Example: `CAST(amount AS DECIMAL(10,2))`
-  - Enterprise view of key business entities
-  - Enables self-service analytics and ML                                                                                                                                                                                            
-                                                                                                                                                                                                                                     
-  **Gold Layer (Business-Ready)**                                                                                                                                                                                                    
-  - Aggregated, denormalized, project-specific tables                                                                                                                                                                                
-  - Optimized for consumption (reporting, dashboards, BI tools)                                                                                                                                                                      
-  - Fewer joins, read-optimized data models
-  - Kimball star schema tables - dim_<entity_name>, fact_<entity_name>
-  - Deduplication often happens here via Slow Changing Dimensions (SCD), using auto_cdc. Sometimes that will happen upstream in silver instead, such as when joining multiple tables or business users plan to query the table from silver.                                                                                                                                                                       
-                                                                                                                                                                                                                                     
-  **Typical Flow (Can vary)**                                                                                                                                                                                                                  
-  Bronze: read_files() or spark.readStream.format("cloudFiles") → streaming table                                                                                                                                                                                             
-  Silver: read bronze → filter/clean/validate → streaming table
-  Gold: read silver → aggregate/denormalize → auto_cdc or materialized view                                                                                                                                                                      
-                                                                                                                                                                                                                        
-  Sources:                                                                                                                                                                                                                           
-  - https://www.databricks.com/glossary/medallion-architecture                                                                                                                                                                       
-  - https://docs.databricks.com/aws/en/lakehouse/medallion                                                                                                                                                                           
-  - https://www.databricks.com/blog/2022/06/24/data-warehousing-modeling-techniques-and-their-implementation-on-the-databricks-lakehouse-platform.html
-  
+### Medallion Architecture
+
+| Layer | SDP Pattern | Common Practices |
+|-------|-------------|------------------|
+| **Bronze** | `STREAM read_files()` → streaming table | Often adds `_metadata.file_path`, `_ingested_at`. Minimal transforms, append-only. |
+| **Silver** | `stream(bronze)` → streaming table | Clean/validate, type casting, quality filters. Prefer `DECIMAL(p,s)` for money. Dedup can happen here or gold. |
+| **Gold** | `AUTO CDC INTO` or materialized view | Aggregated, denormalized. SCD/dedup often via `AUTO CDC`. Star schema typically uses `dim_*`/`fact_*`. |
+
 **For medallion architecture** (bronze/silver/gold), two approaches work:
 - **Flat with naming** (template default): `bronze_*.sql`, `silver_*.sql`, `gold_*.sql`
 - **Subdirectories**: `bronze/orders.sql`, `silver/cleaned.sql`, `gold/summary.sql`
 
-Both work with the `transformations/**` glob pattern. Choose based on preference.
+Both work with the `transformations/**` glob pattern. Choose based on preference/existing.
 
 See **[1-project-initialization.md](references/1-project-initialization.md)** for complete details on bundle initialization, migration, and troubleshooting.
 
