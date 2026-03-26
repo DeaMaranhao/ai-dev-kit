@@ -79,12 +79,26 @@ def _upload_single_file(w: WorkspaceClient, local_path: str, remote_path: str, o
 
         # Use workspace.upload with AUTO format to handle all file types
         # AUTO will detect notebooks vs regular files based on extension/content
-        w.workspace.upload(
-            path=remote_path,
-            content=io.BytesIO(content),
-            format=ImportFormat.AUTO,
-            overwrite=overwrite,
-        )
+        try:
+            w.workspace.upload(
+                path=remote_path,
+                content=io.BytesIO(content),
+                format=ImportFormat.AUTO,
+                overwrite=overwrite,
+            )
+        except Exception as e:
+            # Handle type mismatch error (e.g., overwriting NOTEBOOK with FILE or vice versa)
+            # Databricks won't allow this, so delete first and re-upload
+            if "type mismatch" in str(e).lower() and overwrite:
+                w.workspace.delete(remote_path)
+                w.workspace.upload(
+                    path=remote_path,
+                    content=io.BytesIO(content),
+                    format=ImportFormat.AUTO,
+                    overwrite=False,
+                )
+            else:
+                raise
 
         return UploadResult(local_path=local_path, remote_path=remote_path, success=True)
 
