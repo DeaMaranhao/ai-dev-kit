@@ -5,12 +5,13 @@ Functions for uploading files and folders to Databricks Workspace.
 Uses Databricks Workspace API via SDK.
 """
 
+import glob
 import io
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.workspace import ImportFormat
@@ -137,51 +138,195 @@ def _collect_directories(local_folder: str) -> List[str]:
     return sorted(directories)
 
 
-def upload_folder(
-    local_folder: str, workspace_folder: str, max_workers: int = 10, overwrite: bool = True
+def upload_to_workspace(
+    local_path: str, workspace_path: str, max_workers: int = 10, overwrite: bool = True
 ) -> FolderUploadResult:
     """
-    Upload an entire local folder to Databricks workspace.
+    Upload local file(s) or folder(s) to Databricks workspace.
 
-    Uses parallel uploads with ThreadPoolExecutor for performance.
-    Automatically handles all file types using ImportFormat.AUTO.
+    Works like the `cp` command - handles single files, folders, and glob patterns.
+    Automatically creates parent directories in workspace as needed.
 
     Args:
-        local_folder: Path to local folder to upload
-        workspace_folder: Target path in Databricks workspace
-            (e.g., "/Users/user@example.com/my-project")
-        max_workers: Maximum number of parallel upload threads (default: 10)
+        local_path: Path to local file, folder, or glob pattern. Examples:
+            - "/path/to/file.py" - single file
+            - "/path/to/folder" - entire folder (recursive)
+            - "/path/to/folder/*" - all files/folders in folder
+            - "/path/to/*.py" - glob pattern
+        workspace_path: Target path in Databricks workspace
+            (e.g., "/Workspace/Users/user@example.com/my-project")
+        max_workers: Maximum parallel upload threads (default: 10)
         overwrite: Whether to overwrite existing files (default: True)
 
     Returns:
         FolderUploadResult with upload statistics and individual results
 
-    Raises:
-        FileNotFoundError: If local folder doesn't exist
-        ValueError: If local folder is not a directory
-
     Example:
-        >>> result = upload_folder(
-        ...     local_folder="/path/to/my-project",
-        ...     workspace_folder="/Users/me@example.com/my-project"
+        >>> # Upload a single file
+        >>> result = upload_to_workspace(
+        ...     local_path="/path/to/script.py",
+        ...     workspace_path="/Workspace/Users/me@example.com/scripts/script.py"
         ... )
-        >>> print(f"Uploaded {result.successful}/{result.total_files} files")
-        >>> if not result.success:
-        ...     for failed in result.get_failed_uploads():
-        ...         print(f"Failed: {failed.local_path} - {failed.error}")
-    """
-    # Validate local folder
-    local_folder = os.path.abspath(local_folder)
-    if not os.path.exists(local_folder):
-        raise FileNotFoundError(f"Local folder not found: {local_folder}")
-    if not os.path.isdir(local_folder):
-        raise ValueError(f"Path is not a directory: {local_folder}")
 
-    # Normalize workspace path (remove trailing slash)
-    workspace_folder = workspace_folder.rstrip("/")
+        >>> # Upload a folder
+        >>> result = upload_to_workspace(
+        ...     local_path="/path/to/my-project",
+        ...     workspace_path="/Workspace/Users/me@example.com/my-project"
+        ... )
+
+        >>> # Upload folder contents (not the folder itself)
+        >>> result = upload_to_workspace(
+        ...     local_path="/path/to/my-project/*",
+        ...     workspace_path="/Workspace/Users/me@example.com/destination"
+        ... )
+    """
+    local_path = os.path.expanduser(local_path)
+    workspace_path = workspace_path.rstrip("/")
 
     # Initialize client
     w = get_workspace_client()
+
+    # Determine what we're uploading
+    has_glob = "*" in local_path or "?" in local_path
+
+    if has_glob:
+        # Handle glob patterns
+        return _upload_glob(w, local_path, workspace_path, max_workers, overwrite)
+    elif os.path.isfile(local_path):
+        # Single file upload
+        return _upload_single(w, local_path, workspace_path, overwrite)
+    elif os.path.isdir(local_path):
+        # Folder upload
+        return _upload_folder(w, local_path, workspace_path, max_workers, overwrite)
+    else:
+        # Path doesn't exist
+        return FolderUploadResult(
+            local_folder=local_path,
+            remote_folder=workspace_path,
+            total_files=0,
+            successful=0,
+            failed=1,
+            results=[
+                UploadResult(
+                    local_path=local_path,
+                    remote_path=workspace_path,
+                    success=False,
+                    error=f"Path not found: {local_path}",
+                )
+            ],
+        )
+
+
+def _upload_single(
+    w: WorkspaceClient, local_path: str, workspace_path: str, overwrite: bool
+) -> FolderUploadResult:
+    """Upload a single file."""
+    # Create parent directory if needed
+    parent_dir = str(Path(workspace_path).parent)
+    if parent_dir != "/":
+        try:
+            w.workspace.mkdirs(parent_dir)
+        except Exception:
+            pass
+
+    result = _upload_single_file(w, local_path, workspace_path, overwrite)
+    return FolderUploadResult(
+        local_folder=os.path.dirname(local_path),
+        remote_folder=os.path.dirname(workspace_path),
+        total_files=1,
+        successful=1 if result.success else 0,
+        failed=0 if result.success else 1,
+        results=[result],
+    )
+
+
+def _upload_glob(
+    w: WorkspaceClient, pattern: str, workspace_path: str, max_workers: int, overwrite: bool
+) -> FolderUploadResult:
+    """Upload files matching a glob pattern."""
+    # Expand the glob
+    matches = glob.glob(pattern)
+    if not matches:
+        return FolderUploadResult(
+            local_folder=os.path.dirname(pattern),
+            remote_folder=workspace_path,
+            total_files=0,
+            successful=0,
+            failed=1,
+            results=[
+                UploadResult(
+                    local_path=pattern,
+                    remote_path=workspace_path,
+                    success=False,
+                    error=f"No files match pattern: {pattern}",
+                )
+            ],
+        )
+
+    # Get the base directory (the part before any glob characters)
+    base_dir = os.path.dirname(pattern.split("*")[0].split("?")[0].rstrip("/"))
+    if not base_dir:
+        base_dir = "."
+    base_dir = os.path.abspath(base_dir)
+
+    # Create workspace root directory
+    try:
+        w.workspace.mkdirs(workspace_path)
+    except Exception:
+        pass
+
+    # Collect all files from all matches
+    all_files = []
+    all_dirs = set()
+
+    for match in matches:
+        match = os.path.abspath(match)
+        if os.path.isfile(match):
+            # Single file - use its name relative to base_dir
+            rel_path = os.path.relpath(match, base_dir)
+            all_files.append((match, rel_path))
+        elif os.path.isdir(match):
+            # Directory - collect all files recursively
+            folder_name = os.path.basename(match)
+            for local_file, rel_in_folder in _collect_files(match):
+                rel_path = os.path.join(folder_name, rel_in_folder)
+                all_files.append((local_file, rel_path))
+                # Track parent dirs
+                parent = str(Path(rel_path).parent)
+                while parent != ".":
+                    all_dirs.add(parent)
+                    parent = str(Path(parent).parent)
+            # Add the folder itself and its subdirs
+            for subdir in _collect_directories(match):
+                all_dirs.add(os.path.join(folder_name, subdir))
+            all_dirs.add(folder_name)
+
+    # Create all directories
+    for dir_path in sorted(all_dirs):
+        try:
+            w.workspace.mkdirs(f"{workspace_path}/{dir_path}")
+        except Exception:
+            pass
+
+    if not all_files:
+        return FolderUploadResult(
+            local_folder=base_dir,
+            remote_folder=workspace_path,
+            total_files=0,
+            successful=0,
+            failed=0,
+            results=[],
+        )
+
+    # Upload all files in parallel
+    return _parallel_upload(w, all_files, base_dir, workspace_path, max_workers, overwrite)
+
+
+def _upload_folder(
+    w: WorkspaceClient, local_folder: str, workspace_folder: str, max_workers: int, overwrite: bool
+) -> FolderUploadResult:
+    """Upload an entire folder."""
+    local_folder = os.path.abspath(local_folder)
 
     # Create all directories first
     directories = _collect_directories(local_folder)
@@ -190,7 +335,6 @@ def upload_folder(
         try:
             w.workspace.mkdirs(remote_dir)
         except Exception:
-            # Directory might already exist, ignore
             pass
 
     # Create the root directory too
@@ -212,21 +356,29 @@ def upload_folder(
             results=[],
         )
 
-    # Upload files in parallel
+    return _parallel_upload(w, files, local_folder, workspace_folder, max_workers, overwrite)
+
+
+def _parallel_upload(
+    w: WorkspaceClient,
+    files: List[tuple],
+    local_base: str,
+    workspace_base: str,
+    max_workers: int,
+    overwrite: bool,
+) -> FolderUploadResult:
+    """Upload files in parallel."""
     results = []
     successful = 0
     failed = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all upload tasks
         future_to_file = {}
         for local_path, rel_path in files:
-            # Convert Windows paths to forward slashes for workspace
-            remote_path = f"{workspace_folder}/{rel_path.replace(os.sep, '/')}"
+            remote_path = f"{workspace_base}/{rel_path.replace(os.sep, '/')}"
             future = executor.submit(_upload_single_file, w, local_path, remote_path, overwrite)
             future_to_file[future] = (local_path, remote_path)
 
-        # Collect results as they complete
         for future in as_completed(future_to_file):
             result = future.result()
             results.append(result)
@@ -236,61 +388,10 @@ def upload_folder(
                 failed += 1
 
     return FolderUploadResult(
-        local_folder=local_folder,
-        remote_folder=workspace_folder,
+        local_folder=local_base,
+        remote_folder=workspace_base,
         total_files=len(files),
         successful=successful,
         failed=failed,
         results=results,
     )
-
-
-def upload_file(local_path: str, workspace_path: str, overwrite: bool = True) -> UploadResult:
-    """
-    Upload a single file to Databricks workspace.
-
-    Args:
-        local_path: Path to local file
-        workspace_path: Target path in Databricks workspace
-        overwrite: Whether to overwrite existing file (default: True)
-
-    Returns:
-        UploadResult with success status
-
-    Example:
-        >>> result = upload_file(
-        ...     local_path="/path/to/script.py",
-        ...     workspace_path="/Users/me@example.com/scripts/script.py"
-        ... )
-        >>> if result.success:
-        ...     print("Upload complete")
-        ... else:
-        ...     print(f"Error: {result.error}")
-    """
-    if not os.path.exists(local_path):
-        return UploadResult(
-            local_path=local_path,
-            remote_path=workspace_path,
-            success=False,
-            error=f"Local file not found: {local_path}",
-        )
-
-    if not os.path.isfile(local_path):
-        return UploadResult(
-            local_path=local_path,
-            remote_path=workspace_path,
-            success=False,
-            error=f"Path is not a file: {local_path}",
-        )
-
-    w = get_workspace_client()
-
-    # Create parent directory if needed
-    parent_dir = str(Path(workspace_path).parent)
-    if parent_dir != "/":
-        try:
-            w.workspace.mkdirs(parent_dir)
-        except Exception:
-            pass
-
-    return _upload_single_file(w, local_path, workspace_path, overwrite)

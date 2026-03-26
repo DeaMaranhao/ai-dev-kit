@@ -2,46 +2,47 @@
 
 from typing import Dict, Any
 
-from databricks_tools_core.file import (
-    upload_folder as _upload_folder,
-    upload_file as _upload_file,
-)
+from databricks_tools_core.file import upload_to_workspace as _upload_to_workspace
 
 from ..server import mcp
 
 
 @mcp.tool(timeout=300)
-def upload_folder(
-    local_folder: str,
-    workspace_folder: str,
+def upload_to_workspace(
+    local_path: str,
+    workspace_path: str,
     max_workers: int = 10,
     overwrite: bool = True,
 ) -> Dict[str, Any]:
     """
-    Upload an entire local folder to Databricks workspace.
+    Upload local file(s) or folder(s) to Databricks workspace.
 
-    Uses parallel uploads with ThreadPoolExecutor for performance.
-    Automatically handles all file types.
+    Works like the `cp` command - handles single files, folders, and glob patterns.
+    Automatically creates parent directories in workspace as needed.
 
     Args:
-        local_folder: Path to local folder to upload
-        workspace_folder: Target path in Databricks workspace
+        local_path: Path to local file, folder, or glob pattern. Examples:
+            - "/path/to/file.py" - single file
+            - "/path/to/folder" - entire folder (recursive)
+            - "/path/to/folder/*" - all files/folders in folder
+            - "/path/to/*.py" - glob pattern
+        workspace_path: Target path in Databricks workspace
             (e.g., "/Workspace/Users/user@example.com/my-project")
         max_workers: Maximum parallel upload threads (default: 10)
         overwrite: Whether to overwrite existing files (default: True)
 
     Returns:
         Dictionary with upload statistics:
-        - local_folder: Source folder path
+        - local_folder: Source path
         - remote_folder: Target workspace path
         - total_files: Number of files found
         - successful: Number of successful uploads
         - failed: Number of failed uploads
         - success: True if all uploads succeeded
     """
-    result = _upload_folder(
-        local_folder=local_folder,
-        workspace_folder=workspace_folder,
+    result = _upload_to_workspace(
+        local_path=local_path,
+        workspace_path=workspace_path,
         max_workers=max_workers,
         overwrite=overwrite,
     )
@@ -55,38 +56,4 @@ def upload_folder(
         "failed_uploads": [{"local_path": r.local_path, "error": r.error} for r in result.get_failed_uploads()]
         if result.failed > 0
         else [],
-    }
-
-
-@mcp.tool(timeout=60)
-def upload_file(
-    local_path: str,
-    workspace_path: str,
-    overwrite: bool = True,
-) -> Dict[str, Any]:
-    """
-    Upload a single file to Databricks workspace.
-
-    Args:
-        local_path: Path to local file
-        workspace_path: Target path in Databricks workspace
-        overwrite: Whether to overwrite existing file (default: True)
-
-    Returns:
-        Dictionary with:
-        - local_path: Source file path
-        - remote_path: Target workspace path
-        - success: True if upload succeeded
-        - error: Error message if failed
-    """
-    result = _upload_file(
-        local_path=local_path,
-        workspace_path=workspace_path,
-        overwrite=overwrite,
-    )
-    return {
-        "local_path": result.local_path,
-        "remote_path": result.remote_path,
-        "success": result.success,
-        "error": result.error,
     }

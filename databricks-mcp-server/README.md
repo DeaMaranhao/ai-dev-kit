@@ -99,8 +99,7 @@ Claude now has both:
 
 | Tool | Description |
 |------|-------------|
-| `upload_folder` | Upload a local folder to Databricks workspace (parallel) |
-| `upload_file` | Upload a single file to workspace |
+| `upload_to_workspace` | Upload files/folders to workspace (works like `cp` - handles files, folders, globs) |
 
 ### Jobs
 

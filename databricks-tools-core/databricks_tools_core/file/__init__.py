@@ -9,14 +9,12 @@ Note: For Unity Catalog Volume file operations, use the unity_catalog module.
 from .workspace import (
     UploadResult,
     FolderUploadResult,
-    upload_folder,
-    upload_file,
+    upload_to_workspace,
 )
 
 __all__ = [
     # Workspace file operations
     "UploadResult",
     "FolderUploadResult",
-    "upload_folder",
-    "upload_file",
+    "upload_to_workspace",
 ]

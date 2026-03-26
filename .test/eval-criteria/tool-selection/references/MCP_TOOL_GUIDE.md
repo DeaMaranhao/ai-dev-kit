@@ -15,6 +15,7 @@
 ## Workspace Operations
 | Tool | Use For |
 |------|---------|
+| `mcp__databricks__upload_to_workspace` | Upload files/folders to workspace (handles files, folders, globs) |
 | `mcp__databricks__workspace_get_object` | Read notebooks/files from workspace |
 | `mcp__databricks__workspace_list` | List workspace directory contents |
 

@@ -11,10 +11,10 @@ Create `.sql` or `.py` files in a local folder. For syntax examples, see:
 ### Step 2: Upload to Databricks Workspace
 
 ```python
-# MCP Tool: upload_folder
-upload_folder(
-    local_folder="/path/to/my_pipeline",
-    workspace_folder="/Workspace/Users/user@example.com/my_pipeline"
+# MCP Tool: upload_to_workspace
+upload_to_workspace(
+    local_path="/path/to/my_pipeline",
+    workspace_path="/Workspace/Users/user@example.com/my_pipeline"
 )
 ```
 
@@ -90,7 +90,7 @@ if not run_result["success"]:
 
 1. Review errors from run result or `get_pipeline`
 2. Fix issues in local files
-3. Re-upload with `upload_folder`
+3. Re-upload with `upload_to_workspace`
 4. Run `create_or_update_pipeline` again (it will update, not recreate)
 5. Repeat until `result["success"] == True`
 
@@ -116,7 +116,7 @@ if not run_result["success"]:
 
 | Tool | Description |
 |------|-------------|
-| `upload_folder` | Upload local folder to workspace (parallel) |
+| `upload_to_workspace` | Upload files/folders to workspace (handles files, folders, globs) |
 | `get_table_stats_and_schema` | Verify output tables have expected schema and row counts |
 | `execute_sql` | Run ad-hoc SQL to inspect data |
 
