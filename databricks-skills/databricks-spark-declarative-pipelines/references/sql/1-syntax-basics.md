@@ -240,3 +240,4 @@ configuration:
 | Cluster key not working | Verify column exists, limit to 4 keys |
 | Parameter not resolved | Check `${var}` syntax and pipeline configuration |
 | Using legacy `LIVE` keyword | Use `CREATE OR REFRESH STREAMING TABLE` \| `MATERIALIZED VIEW`, not `CREATE LIVE TABLE` \| `STREAMING LIVE TABLE` |
+| Using `input_file_name()` | Use `_metadata.file_path` |

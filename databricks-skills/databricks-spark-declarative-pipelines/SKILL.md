@@ -107,8 +107,8 @@ Before writing pipeline code, make sure you have:
 ```
 
 **After selecting language, read the syntax basics:**
-- **SQL**: Read [sql/1-syntax-basics.md](references/sql/1-syntax-basics.md)
-- **Python**: Read [python/1-syntax-basics.md](references/python/1-syntax-basics.md)
+- **SQL**: Always Read [sql/1-syntax-basics.md](references/sql/1-syntax-basics.md)
+- **Python**: Always Read [python/1-syntax-basics.md](references/python/1-syntax-basics.md)
 
 **Then read additional guides based on what the pipeline needs, when you need it:**
 | If the pipeline needs... | Read |
@@ -251,7 +251,7 @@ For detailed syntax, see [sql/1-syntax-basics.md](references/sql/1-syntax-basics
 - In Databricks Asset Bundles, set these under resources.pipelines.<pipeline>.configuration; validate with databricks bundle validate.
 
 ### Modern Defaults
-- **Raw `.sql`/`.py` files for transformations** - NOT notebooks. Pipeline code must be plain files.
+- **Always use raw `.sql`/`.py` files for the transformations files** - NO notebooks in your pipeline. Pipeline code must be plain files.
 - **Databricks notebook source for explorations** - Use `# Databricks notebook source` format with `# COMMAND ----------` separators for ad-hoc queries. See [examples/exploration_notebook.py](scripts/exploration_notebook.py).
 - **Serverless compute** - Do not use classic clusters unless explicitly required (R, RDD APIs, JAR libraries)
 - **Unity Catalog** (required for serverless)

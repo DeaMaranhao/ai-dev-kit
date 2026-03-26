@@ -318,3 +318,4 @@ Dataset functions should only contain code to define the transformation, not exe
 | Parameter not resolved | Use `spark.conf.get("param_name")` |
 | Actions in definition | Remove `collect()`, `count()`, `save()` from table functions |
 | Using legacy `dlt` API | Replace `import dlt` with `from pyspark import pipelines as dp` |
+| Using `input_file_name()` | Use `F.col("_metadata.file_path")` |
