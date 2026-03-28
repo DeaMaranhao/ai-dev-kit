@@ -98,27 +98,52 @@ Each widget has a position: `{"x": 0, "y": 0, "width": 2, "height": 4}`
 
 | Widget Type | Width | Height | Notes |
 |-------------|-------|--------|-------|
-| Text header | 6 | 1 | Full width |
-| Counter/KPI | 2 | **3-4** | Height 2 is hard to read |
+| Text header | 6 | 1 | Full width; use SEPARATE widgets for title and subtitle |
+| Counter/KPI | 2 | **3-4** | **NEVER height=2** - too cramped! |
 | Line/Bar/Area chart | 3 | **5-6** | Pair side-by-side to fill row |
 | Pie chart | 3 | **5-6** | Needs space for legend |
 | Full-width chart | 6 | 5-7 | For detailed time series |
 | Table | 6 | 5-8 | Full width for readability |
 
-### 5) CARDINALITY & READABILITY
+**Standard dashboard structure:**
+```text
+y=0:  Title (w=6, h=1) - Dashboard title (use separate widget!)
+y=1:  Subtitle (w=6, h=1) - Description (use separate widget!)
+y=2:  KPIs (w=2 each, h=3) - 3 key metrics side-by-side
+y=5:  Section header (w=6, h=1) - "Trends" or similar
+y=6:  Charts (w=3 each, h=5) - Two charts side-by-side
+y=11: Section header (w=6, h=1) - "Details"
+y=12: Table (w=6, h=6) - Detailed data
+```
 
-Charts with too many categories are unreadable. If a dimension has high cardinality:
-- Aggregate to a higher level (region instead of store)
-- Use TOP-N + "Other" bucketing in dataset SQL (`ROW_NUMBER()` to rank, then `CASE WHEN rn <= N THEN dim ELSE 'Other' END`)
-- Use a table widget instead
+### 5) CARDINALITY & READABILITY (CRITICAL)
+
+**Dashboard readability depends on limiting distinct values.** These are guidelines - adjust based on your use case:
+
+| Dimension Type | Suggested Max | Examples |
+|----------------|---------------|----------|
+| Chart color/groups | ~3-8 values | 4 regions, 5 product lines, 3 tiers |
+| Filter dropdowns | ~4-15 values | 8 countries, 5 channels |
+| High cardinality | Use table widget | customer_id, order_id, SKU |
+
+**Before creating any chart with color/grouping:**
+1. Check column cardinality (use `get_table_stats_and_schema` to see distinct values)
+2. If too many distinct values, aggregate to higher level OR use TOP-N + "Other" bucket
+3. For high-cardinality dimensions, use a table widget instead of a chart
 
 ### 6) QUALITY CHECKLIST
 
 Before deploying, verify:
-1. Layout: all rows sum to width=6, no gaps
-2. Field names: `query.fields[].name` matches `encodings.fieldName` exactly
-3. Versions match widget type (see [version table](1-widget-specifications.md#version-requirements))
-4. All SQL queries tested via `execute_sql`
+1. All widget names use only alphanumeric + hyphens + underscores
+2. All rows sum to width=6 with no gaps
+3. KPIs use height 3-4, charts use height 5-6
+4. Chart dimensions have reasonable cardinality (see guidance above)
+5. All widget fieldNames match dataset columns exactly
+6. **Field `name` in query.fields matches `fieldName` in encodings exactly** (e.g., both `"sum(spend)"`)
+7. Counter datasets: use `disaggregated: true` for 1-row datasets, `disaggregated: false` with aggregation for multi-row
+8. Percent values are 0-1 (not 0-100)
+9. SQL uses Spark syntax (date_sub, not INTERVAL)
+10. **All SQL queries tested via `execute_sql` and return expected data**
 
 ---
 
