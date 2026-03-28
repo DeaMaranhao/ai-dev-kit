@@ -70,7 +70,7 @@ Core widget types for AI/BI dashboards. For advanced visualizations (area, scatt
 
 ## Counter (KPI)
 
-- `version`: **2**
+- `version`: **2** (NOT 3!)
 - `widgetType`: "counter"
 - Percent values must be 0-1 in the data (not 0-100)
 
@@ -121,20 +121,44 @@ Format types: `number`, `number-currency`, `number-percent`
 }
 ```
 
-**Multi-row dataset with aggregation** - use `disaggregated: false`:
+**Multi-row dataset with aggregation (supports filters)** - use `disaggregated: false`:
+- Dataset returns multiple rows (e.g., grouped by a filter dimension)
+- Use `"disaggregated": false` and aggregation expression
+- **CRITICAL**: Field `name` MUST match `fieldName` exactly (e.g., `"sum(spend)"`)
+
 ```json
-"fields": [{"name": "sum(spend)", "expression": "SUM(`spend`)"}],
-"disaggregated": false
-// encodings.value.fieldName must match: "sum(spend)"
+{
+  "widget": {
+    "name": "total-spend",
+    "queries": [{
+      "name": "main_query",
+      "query": {
+        "datasetName": "by_category",
+        "fields": [{"name": "sum(spend)", "expression": "SUM(`spend`)"}],
+        "disaggregated": false
+      }
+    }],
+    "spec": {
+      "version": 2,
+      "widgetType": "counter",
+      "encodings": {
+        "value": {"fieldName": "sum(spend)", "displayName": "Total Spend"}
+      },
+      "frame": {"showTitle": true, "title": "Total Spend"}
+    }
+  },
+  "position": {"x": 0, "y": 0, "width": 2, "height": 3}
+}
 ```
 
 ---
 
 ## Table
 
-- `version`: **2**
+- `version`: **2** (NOT 1 or 3!)
 - `widgetType`: "table"
-- Columns only need `fieldName` and `displayName`
+- **Columns only need `fieldName` and `displayName`** - no other properties required
+- Use `"disaggregated": true` for raw rows
 - Default sort: use `ORDER BY` in dataset SQL
 
 ```json
@@ -174,7 +198,9 @@ Format types: `number`, `number-currency`, `number-percent`
 
 - `version`: **3**
 - `widgetType`: "line" or "bar"
+- Use `x`, `y`, optional `color` encodings
 - `scale.type`: `"temporal"` (dates), `"quantitative"` (numbers), `"categorical"` (strings)
+- Use `"disaggregated": true` with pre-aggregated dataset data
 
 **Multiple series - two approaches:**
 
@@ -225,6 +251,7 @@ Swap `x` and `y` - put quantitative on `x`, categorical/temporal on `y`:
 - `widgetType`: "pie"
 - `angle`: quantitative field
 - `color`: categorical dimension
+- **Limit to 3-8 categories for readability**
 
 ```json
 "spec": {
