@@ -326,28 +326,32 @@ else
   echo -e "  ${GREEN}✓${NC} Lakebase OAuth role created"
 fi
 
-# Grant PostgreSQL permissions via Python SDK + psycopg (no psql dependency)
+# Grant PostgreSQL permissions via Python (uses project venv — faster than uv run)
 echo "  Granting PostgreSQL permissions..."
 PROFILE_ENV=""
 if [ -n "$PROFILE" ]; then PROFILE_ENV="DATABRICKS_CONFIG_PROFILE=$PROFILE"; fi
 
-GRANT_OUTPUT=$(env $PROFILE_ENV uv run python3 << GRANT_PYEOF
-from databricks.sdk import WorkspaceClient
+# Use existing venv if available, fall back to uv run
+PYTHON_CMD="uv run python3"
+if [ -f "$PROJECT_DIR/.venv/bin/python3" ]; then
+  PYTHON_CMD="$PROJECT_DIR/.venv/bin/python3"
+fi
+
+GRANT_OUTPUT=$(env $PROFILE_ENV $PYTHON_CMD -c "
+import sys
 from urllib.parse import quote
+from databricks.sdk import WorkspaceClient
 import psycopg
 
 w = WorkspaceClient()
-endpoint_name = "${LAKEBASE_ENDPOINT}"
-endpoint = w.postgres.get_endpoint(name=endpoint_name)
-host = endpoint.status.hosts.host
-cred = w.postgres.generate_database_credential(endpoint=endpoint_name)
-username = w.current_user.me().user_name
-sp = "${SP_CLIENT_ID}"
+ep = w.postgres.get_endpoint(name=sys.argv[1])
+cred = w.postgres.generate_database_credential(endpoint=sys.argv[1])
+user = w.current_user.me().user_name
+sp = sys.argv[2]
 
-conn = psycopg.connect(f"postgresql://{quote(username, safe='')}:{cred.token}@{host}:5432/databricks_postgres?sslmode=require")
+conn = psycopg.connect(f'postgresql://{quote(user, safe="")}:{cred.token}@{ep.status.hosts.host}:5432/databricks_postgres?sslmode=require')
 conn.autocommit = True
 cur = conn.cursor()
-
 for sql in [
     f'GRANT CREATE ON DATABASE databricks_postgres TO "{sp}"',
     'CREATE SCHEMA IF NOT EXISTS builder_app',
@@ -359,12 +363,10 @@ for sql in [
     f'ALTER DEFAULT PRIVILEGES IN SCHEMA builder_app GRANT ALL ON SEQUENCES TO "{sp}"',
 ]:
     cur.execute(sql)
-
 cur.close()
 conn.close()
-print("OK")
-GRANT_PYEOF
-) || true
+print('OK')
+" "$LAKEBASE_ENDPOINT" "$SP_CLIENT_ID" 2>&1) || true
 
 if echo "$GRANT_OUTPUT" | grep -q "OK"; then
   echo -e "  ${GREEN}✓${NC} PostgreSQL permissions granted"
