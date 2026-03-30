@@ -60,33 +60,10 @@ def create_or_update_app(
     description: Optional[str] = None,
     mode: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Create a Databricks App if it doesn't exist, and optionally deploy it.
+    """Create app if not exists, optionally deploy. Deploys latest code if source_code_path provided.
 
-    If the app already exists and source_code_path is provided, deploys
-    the latest code. This is the standard workflow: "make this app exist
-    and be running the latest code."
-
-    Args:
-        name: App name (must be unique within the workspace).
-        source_code_path: Workspace path to deploy from
-            (e.g., /Workspace/Users/user@example.com/my_app).
-            If provided, deploys after create/find.
-        description: Optional human-readable description (used on create only).
-        mode: Optional deployment mode (e.g., "snapshot").
-
-    Returns:
-        Dictionary with:
-        - name: App name
-        - created: True if newly created, False if already existed
-        - url: App URL
-        - status: App status
-        - deployment: Deployment details (if source_code_path provided)
-
-    Example:
-        >>> create_or_update_app("my-app", "/Workspace/Users/me/my_app")
-        {"name": "my-app", "created": True, "url": "...", "deployment": {...}}
-    """
+    See databricks-app-python skill for app development guidance.
+    Returns: {name, created: bool, url, status, deployment}."""
     existing = _find_app_by_name(name)
 
     if existing:
@@ -136,30 +113,9 @@ def get_app(
     include_logs: bool = False,
     deployment_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Get app details by name, or list all apps.
+    """Get app details or list all. include_logs=True for deployment logs.
 
-    Pass a name to get one app's details (optionally with recent logs).
-    Omit name to list all apps (with optional name_contains filter).
-
-    Args:
-        name: App name. If provided, returns detailed app info.
-        name_contains: Filter apps by name substring (for listing).
-        include_logs: If True and name is provided, include deployment logs.
-        deployment_id: Specific deployment ID for logs. If omitted, uses
-            the active deployment.
-
-    Returns:
-        Single app dict (if name provided) or {"apps": [...]}.
-
-    Example:
-        >>> get_app("my-app")
-        {"name": "my-app", "url": "...", "status": "RUNNING", ...}
-        >>> get_app("my-app", include_logs=True)
-        {"name": "my-app", ..., "logs": "..."}
-        >>> get_app()
-        {"apps": [{"name": "my-app", ...}, ...]}
-    """
+    Returns: {name, url, status, logs} or {apps: [...]}."""
     if name:
         result = _get_app(name=name)
 
@@ -186,15 +142,7 @@ def get_app(
 
 @mcp.tool(timeout=60)
 def delete_app(name: str) -> Dict[str, str]:
-    """
-    Delete a Databricks App.
-
-    Args:
-        name: App name to delete.
-
-    Returns:
-        Dictionary confirming deletion.
-    """
+    """Delete a Databricks App."""
     result = _delete_app(name=name)
 
     # Remove from tracked resources

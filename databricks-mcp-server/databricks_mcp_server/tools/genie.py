@@ -44,57 +44,11 @@ def create_or_update_genie(
     space_id: Optional[str] = None,
     serialized_space: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Create or update a Genie Space for SQL-based data exploration.
+    """Create/update Genie Space for natural language SQL queries.
 
-    A Genie Space allows users to ask natural language questions about data
-    and get SQL-generated answers. It connects to tables in Unity Catalog.
-
-    When serialized_space is provided, the space is created/updated using the
-    full serialized configuration via the public /api/2.0/genie/spaces API.
-    This preserves all instructions, SQL examples, and settings from the source.
-    Obtain a serialized_space string via export_genie().
-
-    Args:
-        display_name: Display name for the Genie space
-        table_identifiers: List of tables to include
-            (e.g., ["catalog.schema.customers", "catalog.schema.orders"])
-        warehouse_id: SQL warehouse ID. If not provided, auto-detects the best
-            available warehouse (prefers running, smaller warehouses)
-        description: Optional description of what the Genie space does
-        sample_questions: Optional list of sample questions to help users
-        space_id: Optional existing space_id to update instead of create
-        serialized_space: Optional full serialized space config JSON string
-            (from export_genie). When provided, tables/instructions/SQL examples
-            from the serialized config are used and the public genie/spaces API
-            is called instead of data-rooms.
-
-    Returns:
-        Dictionary with:
-        - space_id: The Genie space ID
-        - display_name: The display name
-        - operation: 'created' or 'updated'
-        - warehouse_id: The warehouse being used
-        - table_count: Number of tables configured
-
-    Example:
-        >>> create_or_update_genie(
-        ...     display_name="Sales Analytics",
-        ...     table_identifiers=["catalog.sales.orders", "catalog.sales.customers"],
-        ...     description="Explore sales data with natural language",
-        ...     sample_questions=["What were total sales last month?"]
-        ... )
-        {"space_id": "abc123...", "display_name": "Sales Analytics", "operation": "created", ...}
-
-        >>> # Update with serialized config (preserves all instructions and SQL examples)
-        >>> exported = export_genie("abc123...")
-        >>> create_or_update_genie(
-        ...     display_name="Sales Analytics",
-        ...     table_identifiers=[],
-        ...     space_id="abc123...",
-        ...     serialized_space=exported["serialized_space"]
-        ... )
-    """
+    warehouse_id auto-detected if omitted. serialized_space (from export_genie) preserves instructions/SQL examples.
+    See databricks-genie skill for configuration details.
+    Returns: {space_id, display_name, operation: created|updated, warehouse_id, table_count}."""
     try:
         description = with_description_footer(description)
         manager = _get_manager()
@@ -214,39 +168,9 @@ def create_or_update_genie(
 
 @mcp.tool(timeout=30)
 def get_genie(space_id: Optional[str] = None, include_serialized_space: bool = False) -> Dict[str, Any]:
-    """
-    Get details of a Genie Space, or list all spaces.
+    """Get Genie Space details or list all. include_serialized_space=True for full config export.
 
-    Pass a space_id to get one space's details (including tables, sample
-    questions). Omit space_id to list all accessible spaces.
-
-    Args:
-        space_id: The Genie space ID. If omitted, lists all spaces.
-        include_serialized_space: If True, include the full serialized space configuration
-            in the response (requires at least CAN EDIT permission). Useful when you
-            want to inspect or export the space config. Default: False.
-
-    Returns:
-        Single space dictionary with Genie space details including:
-            - space_id: The space ID
-            - display_name: The display name
-            - description: The description
-            - warehouse_id: The SQL warehouse ID
-            - table_identifiers: List of configured tables
-            - sample_questions: List of sample questions
-            - serialized_space: Full space config JSON string (only when include_serialized_space=True)
-        Multiple spaces: List of space dictionaries (only when space_id is omitted)
-
-    Example:
-        >>> get_genie("abc123...")
-        {"space_id": "abc123...", "display_name": "Sales Analytics", ...}
-
-        >>> get_genie("abc123...", include_serialized_space=True)
-        {"space_id": "abc123...", ..., "serialized_space": "{\"version\":1,...}"}
-
-        >>> get_genie()
-        {"spaces": [{"space_id": "abc123...", "title": "Sales Analytics", ...}, ...]}
-    """
+    Returns: {space_id, display_name, description, warehouse_id, table_identifiers, sample_questions} or {spaces: [...]}."""
     if space_id:
         try:
             manager = _get_manager()
@@ -297,21 +221,7 @@ def get_genie(space_id: Optional[str] = None, include_serialized_space: bool = F
 
 @mcp.tool(timeout=30)
 def delete_genie(space_id: str) -> Dict[str, Any]:
-    """
-    Delete a Genie Space.
-
-    Args:
-        space_id: The Genie space ID to delete
-
-    Returns:
-        Dictionary with:
-        - success: True if deleted
-        - space_id: The deleted space ID
-
-    Example:
-        >>> delete_genie("abc123...")
-        {"success": True, "space_id": "abc123..."}
-    """
+    """Delete a Genie Space. Returns: {success, space_id}."""
     manager = _get_manager()
     try:
         manager.genie_delete(space_id)
@@ -336,45 +246,10 @@ def migrate_genie(
     description: Optional[str] = None,
     parent_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Export or import a Genie Space for cloning and cross-workspace migration.
+    """Export/import Genie Space for cloning or cross-workspace migration.
 
-    type="export": Retrieve the full serialized configuration of an existing
-    Genie Space (tables, instructions, SQL queries, layout). Requires at least
-    CAN EDIT permission on the space.
-
-    type="import": Create a new Genie Space from a serialized payload obtained
-    via a prior export call.
-
-    Args:
-        type: Operation to perform — "export" or "import"
-        space_id: (export) The Genie space ID to export
-        warehouse_id: (import) SQL warehouse ID for the new space.
-            Use list_warehouses() or get_best_warehouse() to find one.
-        serialized_space: (import) JSON string from a prior export containing
-            the full space configuration. Can also be constructed manually:
-            '{"version":2,"data_sources":{"tables":[{"identifier":"cat.schema.table"}]}}'
-        title: (import) Optional title override
-        description: (import) Optional description override
-        parent_path: (import) Optional workspace folder path for the new space
-            (e.g., "/Workspace/Users/you@company.com/Genie Spaces")
-
-    Returns:
-        export: Dictionary with space_id, title, description, warehouse_id,
-            and serialized_space (JSON string with the full config).
-        import: Dictionary with space_id, title, description, and
-            operation='imported'.
-
-    Example:
-        >>> exported = migrate_genie(type="export", space_id="abc123...")
-        >>> migrate_genie(
-        ...     type="import",
-        ...     warehouse_id=exported["warehouse_id"],
-        ...     serialized_space=exported["serialized_space"],
-        ...     title="Sales Analytics (Clone)"
-        ... )
-        {"space_id": "def456...", "title": "Sales Analytics (Clone)", "operation": "imported"}
-    """
+    type="export": requires space_id. type="import": requires warehouse_id + serialized_space.
+    Returns: export={space_id, title, serialized_space}, import={space_id, title, operation}."""
     if type == "export":
         if not space_id:
             return {"error": "space_id is required for type='export'"}
@@ -442,39 +317,9 @@ def ask_genie(
     conversation_id: Optional[str] = None,
     timeout_seconds: int = 120,
 ) -> Dict[str, Any]:
-    """
-    Ask a natural language question to a Genie Space and get the answer.
+    """Ask natural language question to Genie Space. Pass conversation_id for follow-ups.
 
-    Starts a new conversation, or continues an existing one if conversation_id
-    is provided. Genie generates SQL, executes it, and returns the results.
-
-    Args:
-        space_id: The Genie Space ID to query
-        question: The natural language question to ask
-        conversation_id: Optional ID from a previous ask_genie response.
-            If provided, continues that conversation (follow-up question).
-            If omitted, starts a new conversation.
-        timeout_seconds: Maximum time to wait for response (default 120)
-
-    Returns:
-        Dictionary with:
-        - question: The original question
-        - conversation_id: ID for follow-up questions
-        - message_id: The message ID
-        - status: COMPLETED, FAILED, or CANCELLED
-        - sql: The SQL query Genie generated (if successful)
-        - description: Genie's interpretation of the question
-        - columns: List of column names in the result
-        - data: Query results as list of rows
-        - row_count: Number of rows returned
-        - text_response: Natural language summary of results
-        - error: Error message (if failed)
-
-    Example:
-        >>> result = ask_genie(space_id="abc123", question="What were total sales?")
-        >>> ask_genie(space_id="abc123", question="Break that down by region",
-        ...           conversation_id=result["conversation_id"])
-    """
+    Returns: {question, conversation_id, message_id, status, sql, description, columns, data, row_count, text_response, error}."""
     try:
         w = get_workspace_client()
 

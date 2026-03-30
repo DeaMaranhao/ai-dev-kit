@@ -16,16 +16,7 @@ from ..server import mcp
 
 @mcp.tool(timeout=30)
 def list_volume_files(volume_path: str, max_results: int = 500) -> Dict[str, Any]:
-    """
-    List files and directories in a Unity Catalog volume path.
-
-    Args:
-        volume_path: Path in volume (e.g., "/Volumes/catalog/schema/volume/folder")
-        max_results: Maximum number of results to return (default: 500, max: 1000)
-
-    Returns:
-        Dictionary with 'files' list and 'truncated' boolean indicating if results were limited
-    """
+    """List files in volume path. Returns: {files: [{name, path, is_directory, file_size, last_modified}], truncated}."""
     # Cap max_results to prevent buffer overflow (1MB JSON limit)
     max_results = min(max_results, 1000)
 
@@ -64,20 +55,7 @@ def upload_to_volume(
     max_workers: int = 4,
     overwrite: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Upload local file(s) or folder(s) to a Unity Catalog volume.
-
-    Supports single files, folders, and glob patterns. Auto-creates directories.
-
-    Args:
-        local_path: Local path - file, folder, or glob (e.g., "*.csv", "/path/*")
-        volume_path: Target volume path (e.g., "/Volumes/catalog/schema/volume/data")
-        max_workers: Parallel upload threads (default: 4)
-        overwrite: Overwrite existing files (default: True)
-
-    Returns:
-        Dictionary with total_files, successful, failed, success
-    """
+    """Upload file/folder/glob to volume. Auto-creates directories. Returns: {total_files, successful, failed, success}."""
     result = _upload_to_volume(
         local_path=local_path,
         volume_path=volume_path,
@@ -103,17 +81,7 @@ def download_from_volume(
     local_path: str,
     overwrite: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Download a file from a Unity Catalog volume to local path.
-
-    Args:
-        volume_path: Path in volume (e.g., "/Volumes/catalog/schema/volume/data.csv")
-        local_path: Target local file path
-        overwrite: Whether to overwrite existing local file (default: True)
-
-    Returns:
-        Dictionary with volume_path, local_path, success, and error (if failed)
-    """
+    """Download file from volume to local path. Returns: {volume_path, local_path, success, error}."""
     result = _download_from_volume(
         volume_path=volume_path,
         local_path=local_path,
@@ -133,19 +101,7 @@ def delete_from_volume(
     recursive: bool = False,
     max_workers: int = 4,
 ) -> Dict[str, Any]:
-    """
-    Delete a file or directory from a Unity Catalog volume.
-
-    For directories, use recursive=True to delete contents. Deletes in parallel (be careful with this).
-
-    Args:
-        volume_path: Path to file or directory (e.g., "/Volumes/catalog/schema/volume/folder")
-        recursive: Delete directory contents (required for non-empty dirs)
-        max_workers: Parallel delete threads (default: 4)
-
-    Returns:
-        Dictionary with success, files_deleted, directories_deleted, error
-    """
+    """Delete file/directory from volume. recursive=True for non-empty dirs. Returns: {success, files_deleted, directories_deleted}."""
     result = _delete_from_volume(
         volume_path=volume_path,
         recursive=recursive,
@@ -162,18 +118,7 @@ def delete_from_volume(
 
 @mcp.tool(timeout=30)
 def create_volume_directory(volume_path: str) -> Dict[str, Any]:
-    """
-    Create a directory in a Unity Catalog volume.
-
-    Creates parent directories as needed (like mkdir -p).
-    Idempotent - succeeds if directory already exists.
-
-    Args:
-        volume_path: Path for new directory (e.g., "/Volumes/catalog/schema/volume/new_folder")
-
-    Returns:
-        Dictionary with volume_path and success status
-    """
+    """Create directory in volume (like mkdir -p). Idempotent. Returns: {volume_path, success}."""
     try:
         _create_volume_directory(volume_path)
         return {"volume_path": volume_path, "success": True}
@@ -183,15 +128,7 @@ def create_volume_directory(volume_path: str) -> Dict[str, Any]:
 
 @mcp.tool(timeout=30)
 def get_volume_file_info(volume_path: str) -> Dict[str, Any]:
-    """
-    Get metadata for a file in a Unity Catalog volume.
-
-    Args:
-        volume_path: Path to file in volume
-
-    Returns:
-        Dictionary with name, path, is_directory, file_size, last_modified
-    """
+    """Get file metadata. Returns: {name, path, is_directory, file_size, last_modified}."""
     try:
         info = _get_volume_file_metadata(volume_path)
         return {

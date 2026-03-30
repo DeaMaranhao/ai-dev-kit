@@ -46,130 +46,15 @@ def create_or_update_dashboard(
     warehouse_id: str,
     publish: bool = True,
 ) -> Dict[str, Any]:
-    """Create or update an AI/BI dashboard from JSON content.
+    """Create/update AI/BI dashboard from JSON. MUST test queries with execute_sql() first!
 
-    CRITICAL: Before calling this tool, you MUST:
-    1. Call get_table_stats_and_schema() to get table schemas
-    2. Call execute_sql() to TEST EVERY dataset query
-    If you skip validation, widgets WILL show errors!
+    Widget structure: queries is TOP-LEVEL SIBLING of spec (NOT inside spec, NOT named_queries).
+    fields[].name MUST match encodings fieldName exactly. Use datasetName (camelCase).
+    Versions: counter/table/filter=2, bar/line/pie=3. Layout: 6-col grid.
+    Filter types: filter-multi-select, filter-single-select, filter-date-range-picker.
+    Text widget uses textbox_spec (no spec block). See databricks-aibi-dashboards skill.
 
-    WIDGET STRUCTURE (CRITICAL - follow this exactly):
-    Each widget in a page layout has `queries` as a TOP-LEVEL SIBLING of `spec`.
-    Do NOT put queries inside spec. Do NOT use `named_queries`.
-
-    Correct counter widget:
-    {
-      "widget": {
-        "name": "total-trips",
-        "queries": [
-          {
-            "name": "main_query",
-            "query": {
-              "datasetName": "summary",
-              "fields": [{"name": "sum(trips)", "expression": "SUM(`trips`)"}],
-              "disaggregated": false
-            }
-          }
-        ],
-        "spec": {
-          "version": 2,
-          "widgetType": "counter",
-          "encodings": {
-            "value": {"fieldName": "sum(trips)", "displayName": "Total Trips"}
-          },
-          "frame": {"showTitle": true, "title": "Total Trips"}
-        }
-      },
-      "position": {"x": 0, "y": 0, "width": 2, "height": 3}
-    }
-
-    Correct bar chart widget:
-    {
-      "widget": {
-        "name": "trips-by-zip",
-        "queries": [
-          {
-            "name": "main_query",
-            "query": {
-              "datasetName": "by_zip",
-              "fields": [
-                {"name": "pickup_zip", "expression": "`pickup_zip`"},
-                {"name": "trip_count", "expression": "`trip_count`"}
-              ],
-              "disaggregated": true
-            }
-          }
-        ],
-        "spec": {
-          "version": 3,
-          "widgetType": "bar",
-          "encodings": {
-            "x": {"fieldName": "pickup_zip", "scale": {"type": "categorical"}, "displayName": "ZIP"},
-            "y": {"fieldName": "trip_count", "scale": {"type": "quantitative"}, "displayName": "Trips"}
-          },
-          "frame": {"showTitle": true, "title": "Trips by ZIP"}
-        }
-      },
-      "position": {"x": 0, "y": 3, "width": 6, "height": 5}
-    }
-
-    Correct filter widget:
-    {
-      "widget": {
-        "name": "filter-region",
-        "queries": [
-          {
-            "name": "main_query",
-            "query": {
-              "datasetName": "sales",
-              "fields": [{"name": "region", "expression": "`region`"}],
-              "disaggregated": false
-            }
-          }
-        ],
-        "spec": {
-          "version": 2,
-          "widgetType": "filter-multi-select",
-          "encodings": {
-            "fields": [{"fieldName": "region", "queryName": "main_query", "displayName": "Region"}]
-          },
-          "frame": {"showTitle": true, "title": "Region"}
-        }
-      },
-      "position": {"x": 0, "y": 0, "width": 2, "height": 2}
-    }
-
-    Text widget (NO spec block):
-    {
-      "widget": {
-        "name": "title",
-        "textbox_spec": "## Dashboard Title"
-      },
-      "position": {"x": 0, "y": 0, "width": 6, "height": 1}
-    }
-
-    KEY RULES:
-    - queries[].query.datasetName (camelCase, not dataSetName)
-    - queries[].query.fields[].name MUST exactly match encodings fieldName
-    - Versions: counter=2, table=2, filters=2, bar/line/pie=3
-    - Layout: 6-column grid, each row must sum to width=6
-    - Filter widgetType must be "filter-multi-select", "filter-single-select",
-      or "filter-date-range-picker" (NOT "filter")
-    - Global filters: page with "pageType": "PAGE_TYPE_GLOBAL_FILTERS"
-    - Page-level filters: on regular "PAGE_TYPE_CANVAS" page
-
-    See the databricks-aibi-dashboards skill for full reference.
-
-    Args:
-        display_name: Dashboard display name
-        parent_path: Workspace folder path (e.g., "/Workspace/Users/me/dashboards")
-        serialized_dashboard: Dashboard JSON content as string (MUST be tested first!)
-        warehouse_id: SQL warehouse ID for query execution
-        publish: Whether to publish after creation (default: True)
-
-    Returns:
-        Dictionary with success, status, dashboard_id, path, url, published, error.
-    """
+    Returns: {success, dashboard_id, path, url, published, error}."""
     # MCP deserializes JSON params, so serialized_dashboard may arrive as a dict
     if isinstance(serialized_dashboard, dict):
         serialized_dashboard = json.dumps(serialized_dashboard)
@@ -209,25 +94,7 @@ def get_dashboard(
     dashboard_id: str = None,
     page_size: int = 25,
 ) -> Dict[str, Any]:
-    """Get AI/BI dashboard details by ID, or list all dashboards.
-
-    Pass a dashboard_id to get one dashboard's details.
-    Omit dashboard_id to list all dashboards.
-
-    Args:
-        dashboard_id: The dashboard ID. If omitted, lists all dashboards.
-        page_size: Number of dashboards to return when listing (default: 25)
-
-    Returns:
-        Single dashboard dict (if dashboard_id provided) or
-        {"dashboards": [...]} when listing.
-
-    Example:
-        >>> get_dashboard("abc123")
-        {"dashboard_id": "abc123", "display_name": "Sales Dashboard", ...}
-        >>> get_dashboard()
-        {"dashboards": [{"dashboard_id": "abc", "display_name": "Sales", ...}]}
-    """
+    """Get dashboard by ID or list all. Pass dashboard_id for one, omit to list all."""
     if dashboard_id:
         return _get_dashboard(dashboard_id=dashboard_id)
 
@@ -241,18 +108,7 @@ def get_dashboard(
 
 @mcp.tool(timeout=30)
 def delete_dashboard(dashboard_id: str) -> Dict[str, str]:
-    """Soft-delete an AI/BI dashboard by moving it to trash.
-
-    Args:
-        dashboard_id: Dashboard ID to delete
-
-    Returns:
-        Dictionary with status message
-
-    Example:
-        >>> delete_dashboard("abc123")
-        {"status": "success", "message": "Dashboard abc123 moved to trash", ...}
-    """
+    """Soft-delete dashboard (moves to trash). Returns: {status, message}."""
     result = _trash_dashboard(dashboard_id=dashboard_id)
     try:
         from ..manifest import remove_resource
@@ -275,29 +131,9 @@ def publish_dashboard(
     publish: bool = True,
     embed_credentials: bool = True,
 ) -> Dict[str, Any]:
-    """Publish or unpublish an AI/BI dashboard.
+    """Publish/unpublish dashboard. publish=False to unpublish. warehouse_id required for publish.
 
-    Set publish=True (default) to publish, or publish=False to unpublish.
-
-    Publishing with embed_credentials=True allows users without direct
-    data access to view the dashboard (queries execute using the
-    service principal's permissions).
-
-    Args:
-        dashboard_id: Dashboard ID
-        warehouse_id: SQL warehouse ID for query execution (required for publish)
-        publish: True to publish (default), False to unpublish
-        embed_credentials: Whether to embed credentials (default: True)
-
-    Returns:
-        Dictionary with publish/unpublish status
-
-    Example:
-        >>> publish_dashboard("abc123", "warehouse456")
-        {"status": "published", "dashboard_id": "abc123", ...}
-        >>> publish_dashboard("abc123", publish=False)
-        {"status": "unpublished", "dashboard_id": "abc123", ...}
-    """
+    embed_credentials=True allows users without data access to view (uses SP permissions)."""
     if not publish:
         return _unpublish_dashboard(dashboard_id=dashboard_id)
 

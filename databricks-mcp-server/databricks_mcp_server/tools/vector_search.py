@@ -69,25 +69,11 @@ def create_or_update_vs_endpoint(
     name: str,
     endpoint_type: str = "STANDARD",
 ) -> Dict[str, Any]:
-    """
-    Idempotent create for Vector Search endpoints. Returns existing if one
-    with the same name already exists (endpoints are immutable after creation).
+    """Idempotent create for Vector Search endpoints. Returns existing if already exists.
 
-    Endpoints are compute resources that host vector search indexes.
-    Creation is asynchronous -- use get_vs_endpoint() to check status.
-
-    Args:
-        name: Endpoint name (unique within workspace)
-        endpoint_type: "STANDARD" (low-latency, <100ms) or
-            "STORAGE_OPTIMIZED" (cost-effective, ~250ms, supports 1B+ vectors)
-
-    Returns:
-        Dictionary with endpoint details and whether it was created or already existed.
-
-    Example:
-        >>> create_or_update_vs_endpoint("my-endpoint", "STORAGE_OPTIMIZED")
-        {"name": "my-endpoint", "endpoint_type": "STORAGE_OPTIMIZED", "created": True}
-    """
+    endpoint_type: "STANDARD" (<100ms) or "STORAGE_OPTIMIZED" (~250ms, 1B+ vectors).
+    Async creation - use get_vs_endpoint() to poll status.
+    Returns: {name, endpoint_type, created: bool}."""
     existing = _find_endpoint_by_name(name)
     if existing:
         return {**existing, "created": False}
@@ -112,23 +98,9 @@ def create_or_update_vs_endpoint(
 def get_vs_endpoint(
     name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Get Vector Search endpoint details, or list all endpoints.
+    """Get endpoint details or list all. Pass name for one, omit for all.
 
-    Pass a name to get one endpoint's details. Omit name to list all endpoints.
-
-    Args:
-        name: Endpoint name. If omitted, lists all endpoints.
-
-    Returns:
-        Single endpoint dict (if name provided) or {"endpoints": [...]}.
-
-    Example:
-        >>> get_vs_endpoint("my-endpoint")
-        {"name": "my-endpoint", "state": "ONLINE", "num_indexes": 3}
-        >>> get_vs_endpoint()
-        {"endpoints": [{"name": "my-endpoint", "state": "ONLINE", ...}]}
-    """
+    Returns: {name, state, num_indexes} or {endpoints: [...]}."""
     if name:
         return _get_vs_endpoint(name=name)
 
@@ -142,21 +114,9 @@ def get_vs_endpoint(
 
 @mcp.tool(timeout=60)
 def delete_vs_endpoint(name: str) -> Dict[str, Any]:
-    """
-    Delete a Vector Search endpoint.
+    """Delete a Vector Search endpoint. All indexes must be deleted first.
 
-    All indexes on the endpoint must be deleted first.
-
-    Args:
-        name: Endpoint name to delete
-
-    Returns:
-        Dictionary with name and status ("deleted" or error info)
-
-    Example:
-        >>> delete_vs_endpoint("my-endpoint")
-        {"name": "my-endpoint", "status": "deleted"}
-    """
+    Returns: {name, status}."""
     return _delete_vs_endpoint(name=name)
 
 
@@ -174,52 +134,13 @@ def create_or_update_vs_index(
     delta_sync_index_spec: Optional[Dict[str, Any]] = None,
     direct_access_index_spec: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    Idempotent create for Vector Search indexes. Returns existing if one
-    with the same name already exists. Triggers an initial sync after
-    creating a new DELTA_SYNC index.
+    """Idempotent create for Vector Search indexes. Returns existing if found. Auto-triggers initial sync for DELTA_SYNC.
 
-    For DELTA_SYNC indexes (auto-sync from Delta table):
-      - Managed embeddings: provide embedding_source_columns with model endpoint
-      - Self-managed: provide embedding_vector_columns with pre-computed vectors
-
-    For DIRECT_ACCESS indexes (manual CRUD):
-      - Provide embedding_vector_columns and schema_json
-
-    Args:
-        name: Fully qualified index name (catalog.schema.index_name)
-        endpoint_name: Vector Search endpoint to host this index
-        primary_key: Column name for the primary key
-        index_type: "DELTA_SYNC" or "DIRECT_ACCESS"
-        delta_sync_index_spec: Config for Delta Sync index:
-            - source_table: Fully qualified source table
-            - embedding_source_columns: For managed embeddings
-              [{"name": "content", "embedding_model_endpoint_name": "databricks-gte-large-en"}]
-            - embedding_vector_columns: For self-managed embeddings
-              [{"name": "embedding", "embedding_dimension": 768}]
-            - pipeline_type: "TRIGGERED" or "CONTINUOUS"
-            - columns_to_sync: Optional list of columns to include
-        direct_access_index_spec: Config for Direct Access index:
-            - embedding_vector_columns: [{"name": "embedding", "embedding_dimension": 768}]
-            - schema_json: JSON schema string
-
-    Returns:
-        Dictionary with index details and whether it was created or already existed.
-
-    Example:
-        >>> create_or_update_vs_index(
-        ...     name="catalog.schema.docs_index",
-        ...     endpoint_name="my-endpoint",
-        ...     primary_key="id",
-        ...     delta_sync_index_spec={
-        ...         "source_table": "catalog.schema.documents",
-        ...         "embedding_source_columns": [
-        ...             {"name": "content", "embedding_model_endpoint_name": "databricks-gte-large-en"}
-        ...         ],
-        ...         "pipeline_type": "TRIGGERED"
-        ...     }
-        ... )
-    """
+    index_type: "DELTA_SYNC" (auto-sync from Delta) or "DIRECT_ACCESS" (manual CRUD).
+    delta_sync_index_spec: {source_table, embedding_source_columns (managed) OR embedding_vector_columns (self-managed), pipeline_type: TRIGGERED|CONTINUOUS}.
+    direct_access_index_spec: {embedding_vector_columns, schema_json}.
+    See databricks-vector-search skill for full spec details.
+    Returns: {name, created: bool, sync_triggered}."""
     existing = _find_index_by_name(name)
     if existing:
         return {**existing, "created": False}
@@ -261,29 +182,10 @@ def get_vs_index(
     index_name: Optional[str] = None,
     endpoint_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Get Vector Search index details, or list indexes.
+    """Get index details or list indexes.
 
-    Pass index_name to get one index's details. Pass endpoint_name to list
-    all indexes on that endpoint. Omit both to list all indexes across
-    all endpoints in the workspace.
-
-    Args:
-        index_name: Fully qualified index name (catalog.schema.index_name).
-            If provided, returns detailed index info.
-        endpoint_name: Endpoint name. Lists all indexes on this endpoint.
-
-    Returns:
-        Single index dict (if index_name) or {"indexes": [...]}.
-
-    Example:
-        >>> get_vs_index(index_name="catalog.schema.docs_index")
-        {"name": "catalog.schema.docs_index", "state": "ONLINE", ...}
-        >>> get_vs_index(endpoint_name="my-endpoint")
-        {"indexes": [{"name": "catalog.schema.docs_index", ...}]}
-        >>> get_vs_index()
-        {"indexes": [{"name": "catalog.schema.docs_index", "endpoint_name": "my-endpoint", ...}]}
-    """
+    index_name: Get one index. endpoint_name: List indexes on endpoint. Omit both: list all.
+    Returns: {name, state, ...} or {indexes: [...]}."""
     if index_name:
         return _get_vs_index(index_name=index_name)
 
@@ -314,19 +216,7 @@ def get_vs_index(
 
 @mcp.tool(timeout=60)
 def delete_vs_index(index_name: str) -> Dict[str, Any]:
-    """
-    Delete a Vector Search index.
-
-    Args:
-        index_name: Fully qualified index name (catalog.schema.index_name)
-
-    Returns:
-        Dictionary with name and status ("deleted" or error info)
-
-    Example:
-        >>> delete_vs_index("catalog.schema.docs_index")
-        {"name": "catalog.schema.docs_index", "status": "deleted"}
-    """
+    """Delete a Vector Search index. Returns: {name, status}."""
     return _delete_vs_index(index_name=index_name)
 
 
@@ -346,41 +236,12 @@ def query_vs_index(
     filter_string: Optional[str] = None,
     query_type: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Query a Vector Search index for similar documents.
+    """Query a Vector Search index for similar documents.
 
-    Provide either query_text (for indexes with embedding models) or
-    query_vector (pre-computed embedding).
-
-    For filters:
-    - Standard endpoints: filters_json (dict format) e.g. '{"category": "ai"}'
-    - Storage-Optimized endpoints: filter_string (SQL syntax) e.g. "category = 'ai'"
-
-    Args:
-        index_name: Fully qualified index name (catalog.schema.index_name)
-        columns: Column names to return in results
-        query_text: Text query (for managed/attached embeddings)
-        query_vector: Pre-computed query embedding vector
-        num_results: Number of results to return (default: 5)
-        filters_json: JSON string filters for Standard endpoints
-        filter_string: SQL-like filter for Storage-Optimized endpoints
-        query_type: "ANN" (default) or "HYBRID" (vector + keyword search)
-
-    Returns:
-        Dictionary with:
-        - columns: Column names in results
-        - data: List of result rows (similarity score appended as last column)
-        - num_results: Number of results returned
-
-    Example:
-        >>> query_vs_index(
-        ...     index_name="catalog.schema.docs_index",
-        ...     columns=["id", "content"],
-        ...     query_text="What is machine learning?",
-        ...     num_results=5
-        ... )
-        {"columns": ["id", "content", "score"], "data": [...], "num_results": 5}
-    """
+    Use query_text (managed embeddings) or query_vector (pre-computed).
+    Filters: filters_json for Standard, filter_string (SQL) for Storage-Optimized.
+    query_type: "ANN" (default) or "HYBRID".
+    Returns: {columns, data (score appended), num_results}."""
     # MCP deserializes JSON params, so filters_json may arrive as a dict
     if isinstance(filters_json, dict):
         filters_json = json.dumps(filters_json)
@@ -410,37 +271,13 @@ def manage_vs_data(
     primary_keys: Optional[List[str]] = None,
     num_results: int = 100,
 ) -> Dict[str, Any]:
-    """
-    Manage data in a Vector Search index: upsert, delete, scan, or sync.
+    """Manage Vector Search index data: upsert, delete, scan, or sync.
 
-    Required parameters per operation:
-    - "upsert": inputs_json (JSON string of records with primary key + embedding columns)
-    - "delete": primary_keys (list of primary key values to remove)
-    - "scan": num_results (optional, defaults to 100)
-    - "sync": no extra params (triggers re-sync for TRIGGERED pipeline DELTA_SYNC indexes)
-
-    Args:
-        index_name: Fully qualified index name (catalog.schema.index_name)
-        operation: One of "upsert", "delete", "scan", or "sync"
-        inputs_json: Records to upsert. REQUIRED for "upsert", ignored otherwise.
-            Example: '[{"id": "1", "text": "hello", "embedding": [0.1, 0.2, ...]}]'
-        primary_keys: Primary key values to delete. REQUIRED for "delete", ignored otherwise.
-        num_results: Maximum entries to return for "scan" (default: 100)
-
-    Returns:
-        Dictionary with operation results.
-
-    Example:
-        >>> manage_vs_data("catalog.schema.idx", "upsert",
-        ...     inputs_json='[{"id": "1", "text": "hello", "embedding": [0.1]}]')
-        {"name": "catalog.schema.idx", "status": "SUCCESS", "num_records": 1}
-        >>> manage_vs_data("catalog.schema.idx", "delete", primary_keys=["1", "2"])
-        {"name": "catalog.schema.idx", "status": "SUCCESS", "num_deleted": 2}
-        >>> manage_vs_data("catalog.schema.idx", "scan", num_results=10)
-        {"columns": [...], "data": [...], "num_results": 10}
-        >>> manage_vs_data("catalog.schema.idx", "sync")
-        {"index_name": "catalog.schema.idx", "status": "sync_triggered"}
-    """
+    Operations:
+    - upsert: requires inputs_json (records with pk + embedding)
+    - delete: requires primary_keys
+    - scan: optional num_results (default 100)
+    - sync: triggers re-sync for TRIGGERED DELTA_SYNC indexes"""
     op = operation.lower()
 
     if op == "upsert":

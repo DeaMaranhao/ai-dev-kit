@@ -36,20 +36,10 @@ def create_pipeline(
     workspace_file_paths: List[str],
     extra_settings: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
-    """
-    Create a new Spark Declarative Pipeline (SDP). Unity Catalog, serverless by default.
+    """Create a Spark Declarative Pipeline (SDP). Unity Catalog + serverless by default.
 
-    Args:
-        name: Pipeline name
-        root_path: Root folder for source code (added to sys.path)
-        catalog: Unity Catalog name
-        schema: Schema name for output tables
-        workspace_file_paths: List of workspace .sql or .py file paths
-        extra_settings: Additional pipeline settings dict
-
-    Returns:
-        Dict with pipeline_id.
-    """
+    See databricks-spark-declarative-pipelines skill for configuration details.
+    Returns: {pipeline_id}."""
     # Auto-inject default tags into extra_settings; user tags take precedence
     extra_settings = extra_settings or {}
     extra_settings.setdefault("tags", {})
@@ -82,15 +72,7 @@ def create_pipeline(
 
 @mcp.tool
 def get_pipeline(pipeline_id: str) -> Dict[str, Any]:
-    """
-    Get pipeline details and configuration.
-
-    Args:
-        pipeline_id: Pipeline ID
-
-    Returns:
-        Dictionary with pipeline configuration and state.
-    """
+    """Get pipeline details and configuration."""
     result = _get_pipeline(pipeline_id=pipeline_id)
     return result.as_dict() if hasattr(result, "as_dict") else vars(result)
 
@@ -105,21 +87,7 @@ def update_pipeline(
     workspace_file_paths: List[str] = None,
     extra_settings: Dict[str, Any] = None,
 ) -> Dict[str, str]:
-    """
-    Update pipeline configuration.
-
-    Args:
-        pipeline_id: Pipeline ID
-        name: New pipeline name
-        root_path: New root folder for source code
-        catalog: New catalog name
-        schema: New schema name
-        workspace_file_paths: New list of .sql or .py file paths
-        extra_settings: Additional pipeline settings dict
-
-    Returns:
-        Dict with status.
-    """
+    """Update pipeline configuration. Only specified params change. Returns: {status}."""
     _update_pipeline(
         pipeline_id=pipeline_id,
         name=name,
@@ -134,15 +102,7 @@ def update_pipeline(
 
 @mcp.tool
 def delete_pipeline(pipeline_id: str) -> Dict[str, str]:
-    """
-    Delete a pipeline.
-
-    Args:
-        pipeline_id: Pipeline ID
-
-    Returns:
-        Dictionary with status message.
-    """
+    """Delete a pipeline. Returns: {status}."""
     _delete_pipeline(pipeline_id=pipeline_id)
     try:
         from ..manifest import remove_resource
@@ -164,22 +124,9 @@ def start_update(
     timeout: int = 300,
     full_error_details: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Start a pipeline update. Waits for completion by default.
+    """Start pipeline update. Waits for completion by default.
 
-    Args:
-        pipeline_id: Pipeline ID
-        refresh_selection: Table names to refresh
-        full_refresh: Full refresh all tables
-        full_refresh_selection: Table names for full refresh
-        validate_only: Dry run without updating data
-        wait: Wait for completion (default: True)
-        timeout: Max wait time in seconds (default: 300)
-        full_error_details: Include full stack traces (default: False)
-
-    Returns:
-        Dict with update_id, state, success, error_summary if failed.
-    """
+    Returns: {update_id, state, success, error_summary}."""
     return _start_update(
         pipeline_id=pipeline_id,
         refresh_selection=refresh_selection,
@@ -199,18 +146,9 @@ def get_update(
     include_config: bool = False,
     full_error_details: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Get pipeline update status. Auto-fetches errors if failed.
+    """Get pipeline update status. Auto-fetches errors if failed.
 
-    Args:
-        pipeline_id: Pipeline ID
-        update_id: Update ID from start_update
-        include_config: Include full pipeline config (default: False)
-        full_error_details: Include full stack traces (default: False)
-
-    Returns:
-        Dict with update_id, state, success, error_summary if failed.
-    """
+    Returns: {update_id, state, success, error_summary}."""
     return _get_update(
         pipeline_id=pipeline_id,
         update_id=update_id,
@@ -221,15 +159,7 @@ def get_update(
 
 @mcp.tool
 def stop_pipeline(pipeline_id: str) -> Dict[str, str]:
-    """
-    Stop a running pipeline.
-
-    Args:
-        pipeline_id: Pipeline ID
-
-    Returns:
-        Dictionary with status message.
-    """
+    """Stop a running pipeline. Returns: {status}."""
     _stop_pipeline(pipeline_id=pipeline_id)
     return {"status": "stopped"}
 
@@ -241,18 +171,7 @@ def get_pipeline_events(
     event_log_level: str = "WARN",
     update_id: str = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Get pipeline events for debugging. Returns ERROR/WARN by default.
-
-    Args:
-        pipeline_id: Pipeline ID
-        max_results: Max events to return (default: 5)
-        event_log_level: ERROR, WARN (includes ERROR), or INFO (all events)
-        update_id: Filter to specific update
-
-    Returns:
-        List of event dicts with error details.
-    """
+    """Get pipeline events for debugging. event_log_level: ERROR, WARN (default), INFO."""
     # Convert log level to filter expression
     level_filters = {
         "ERROR": "level='ERROR'",
@@ -280,24 +199,10 @@ def create_or_update_pipeline(
     timeout: int = 1800,
     extra_settings: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
-    """
-    Create or update a pipeline by name, optionally run it. Uses Unity Catalog + serverless.
+    """Create or update pipeline by name, optionally run. Unity Catalog + serverless.
 
-    Args:
-        name: Pipeline name (used for lookup and creation)
-        root_path: Root folder for source code (added to sys.path)
-        catalog: Unity Catalog name
-        schema: Schema name for output tables
-        workspace_file_paths: List of workspace .sql or .py file paths
-        start_run: Start pipeline update after create/update
-        wait_for_completion: Wait for run to complete
-        full_refresh: Full refresh when starting (default: True)
-        timeout: Max wait time in seconds (default: 1800)
-        extra_settings: Additional pipeline settings dict
-
-    Returns:
-        Dict with pipeline_id, created (bool), success, state, error_summary if failed.
-    """
+    See databricks-spark-declarative-pipelines skill for configuration details.
+    Returns: {pipeline_id, created, success, state, error_summary}."""
     # Auto-inject default tags into extra_settings; user tags take precedence
     extra_settings = extra_settings or {}
     extra_settings.setdefault("tags", {})
@@ -336,17 +241,7 @@ def create_or_update_pipeline(
 
 @mcp.tool
 def find_pipeline_by_name(name: str) -> Dict[str, Any]:
-    """
-    Find a pipeline by name and return its ID.
-
-    Args:
-        name: Pipeline name to search for
-
-    Returns:
-        Dictionary with:
-        - found: True if pipeline exists
-        - pipeline_id: Pipeline ID if found, None otherwise
-    """
+    """Find pipeline by name. Returns: {found: bool, pipeline_id}."""
     pipeline_id = _find_pipeline_by_name(name=name)
     return {
         "found": pipeline_id is not None,

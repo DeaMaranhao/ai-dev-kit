@@ -93,24 +93,11 @@ def create_or_update_lakebase_database(
     display_name: Optional[str] = None,
     pg_version: str = "17",
 ) -> Dict[str, Any]:
-    """
-    Create or update a Lakebase managed PostgreSQL database.
+    """Create/update Lakebase PostgreSQL database.
 
-    Finds an existing database by name and updates it, or creates a new one.
-    For autoscale, a new project includes a production branch, default compute,
-    and a databricks_postgres database automatically.
-
-    Args:
-        name: Database name (1-63 chars, lowercase letters, digits, hyphens)
-        type: "provisioned" (fixed capacity) or "autoscale" (auto-scaling compute)
-        capacity: Provisioned compute: "CU_1", "CU_2", "CU_4", or "CU_8"
-        stopped: If True, create provisioned instance in stopped state
-        display_name: Autoscale display name (defaults to name)
-        pg_version: Autoscale Postgres version: "16" or "17"
-
-    Returns:
-        Dictionary with database details, status, and connection info.
-    """
+    type: "provisioned" (fixed capacity CU_1/2/4/8) or "autoscale" (auto-scaling, includes production branch).
+    See databricks-lakebase-provisioned or databricks-lakebase-autoscale skill for details.
+    Returns: {created: bool, type, ...connection info}."""
     db_type = type.lower()
 
     if db_type == "provisioned":
@@ -161,19 +148,7 @@ def get_lakebase_database(
     name: Optional[str] = None,
     type: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Get details of a Lakebase database, or list all databases.
-
-    Pass a name to get one database's details (including branches, endpoints
-    for autoscale). Omit name to list all databases.
-
-    Args:
-        name: Database name. If omitted, lists all databases.
-        type: Filter by "provisioned" or "autoscale". If omitted, checks both.
-
-    Returns:
-        Single database dict (if name provided) or {"databases": [...]}.
-    """
+    """Get database details or list all. Pass name for one (includes branches/endpoints for autoscale), omit for all."""
     if name:
         result = None
         if type is None or type.lower() == "provisioned":
@@ -233,20 +208,7 @@ def delete_lakebase_database(
     type: str = "provisioned",
     force: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Delete a Lakebase database and its resources.
-
-    For provisioned: deletes the instance (use force=True to cascade to children).
-    For autoscale: deletes the project and all branches, computes, and data.
-
-    Args:
-        name: Database name to delete
-        type: "provisioned" or "autoscale"
-        force: If True, force-delete child resources (provisioned only)
-
-    Returns:
-        Dictionary with name and deletion status.
-    """
+    """Delete database. force=True cascades to children (provisioned). Autoscale deletes all branches/computes/data."""
     db_type = type.lower()
 
     if db_type == "provisioned":
@@ -275,28 +237,9 @@ def create_or_update_lakebase_branch(
     autoscaling_limit_max_cu: Optional[float] = None,
     scale_to_zero_seconds: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """
-    Create or update a Lakebase Autoscale branch with its compute endpoint.
+    """Create/update Autoscale branch with compute endpoint. Branches are isolated copy-on-write environments.
 
-    Branches are isolated database environments using copy-on-write storage.
-    If the branch exists, updates its settings. Otherwise creates a new branch
-    and a compute endpoint on it.
-
-    Args:
-        project_name: Project name (e.g., "my-app" or "projects/my-app")
-        branch_id: Branch identifier (1-63 chars, lowercase letters, digits, hyphens)
-        source_branch: Source branch to fork from (default: production)
-        ttl_seconds: Time-to-live in seconds (max 30 days = 2592000s)
-        no_expiry: If True, branch never expires
-        is_protected: If True, branch cannot be deleted
-        endpoint_type: "ENDPOINT_TYPE_READ_WRITE" or "ENDPOINT_TYPE_READ_ONLY"
-        autoscaling_limit_min_cu: Minimum compute units (0.5-32)
-        autoscaling_limit_max_cu: Maximum compute units (0.5-112)
-        scale_to_zero_seconds: Inactivity timeout before suspending (0 to disable)
-
-    Returns:
-        Dictionary with branch details and endpoint connection info.
-    """
+    Returns: {branch details, endpoint connection info, created: bool}."""
     existing = _find_branch(project_name, branch_id)
 
     if existing:
@@ -366,19 +309,7 @@ def create_or_update_lakebase_branch(
 
 @mcp.tool(timeout=60)
 def delete_lakebase_branch(name: str) -> Dict[str, Any]:
-    """
-    Delete a Lakebase Autoscale branch and its compute endpoints.
-
-    The branch's data, databases, roles, and computes are permanently deleted.
-    Cannot delete protected branches or branches with children.
-
-    Args:
-        name: Branch resource name
-            (e.g., "projects/my-app/branches/development")
-
-    Returns:
-        Dictionary with name and deletion status.
-    """
+    """Delete Autoscale branch and endpoints. Permanently deletes data/databases/roles. Cannot delete protected branches."""
     return _delete_branch(name=name)
 
 
@@ -397,25 +328,9 @@ def create_or_update_lakebase_sync(
     primary_key_columns: Optional[List[str]] = None,
     scheduling_policy: str = "TRIGGERED",
 ) -> Dict[str, Any]:
-    """
-    Set up reverse ETL from a Delta table to Lakebase.
+    """Set up reverse ETL from Delta table to Lakebase. Creates catalog if needed, then synced table.
 
-    Ensures the UC catalog registration exists, then creates a synced table
-    to replicate data from the Lakehouse into PostgreSQL.
-
-    Args:
-        instance_name: Lakebase instance name
-        source_table_name: Source Delta table (catalog.schema.table)
-        target_table_name: Target table in Lakebase (catalog.schema.table)
-        catalog_name: UC catalog name for the Lakebase instance.
-            If omitted, derives from target_table_name.
-        database_name: PostgreSQL database name (default: "databricks_postgres")
-        primary_key_columns: Primary key columns (defaults to source table's PK)
-        scheduling_policy: "TRIGGERED", "SNAPSHOT", or "CONTINUOUS"
-
-    Returns:
-        Dictionary with catalog and synced table details.
-    """
+    scheduling_policy: TRIGGERED/SNAPSHOT/CONTINUOUS. Returns: {catalog, synced_table, created}."""
     # Derive catalog name from target table if not provided
     if not catalog_name:
         parts = target_table_name.split(".")
@@ -475,19 +390,7 @@ def delete_lakebase_sync(
     table_name: str,
     catalog_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Remove a Lakebase synced table and optionally its UC catalog registration.
-
-    The source Delta table is not affected.
-
-    Args:
-        table_name: Fully qualified synced table name (catalog.schema.table)
-        catalog_name: UC catalog to also remove. If omitted, only the
-            synced table is deleted.
-
-    Returns:
-        Dictionary with deletion status for synced table and catalog.
-    """
+    """Remove synced table, optionally UC catalog. Source Delta table unaffected."""
     result = {}
 
     sync_result = _delete_synced_table(table_name=table_name)
@@ -513,21 +416,9 @@ def generate_lakebase_credential(
     instance_names: Optional[List[str]] = None,
     endpoint: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Generate an OAuth token for connecting to a Lakebase database.
+    """Generate OAuth token (~1hr) for Lakebase connection. Use as password with sslmode=require.
 
-    Provide instance_names for provisioned databases, or endpoint for autoscale.
-    The token is valid for ~1 hour. Use as the password in PostgreSQL
-    connection strings with sslmode=require.
-
-    Args:
-        instance_names: Provisioned instance names to generate credentials for
-        endpoint: Autoscale endpoint resource name
-            (e.g., "projects/my-app/branches/production/endpoints/ep-primary")
-
-    Returns:
-        Dictionary with OAuth token and usage instructions.
-    """
+    Provide instance_names (provisioned) or endpoint (autoscale)."""
     if instance_names:
         return _generate_provisioned_credential(instance_names=instance_names)
     elif endpoint:

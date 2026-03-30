@@ -479,52 +479,13 @@ def manage_ka(
     tile_id: str = None,
     add_examples_from_volume: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Create or update a Knowledge Assistant (KA) with document knowledge sources.
+    """Manage Knowledge Assistant (KA) - RAG-based document Q&A.
 
-    A Knowledge Assistant is a document-based Q&A system that uses RAG to answer
-    questions from indexed documents (PDFs, text files, etc.).
-
-    Actions:
-    - create_or_update: Create or update a KA (requires name, volume_path)
-    - get: Get KA details by tile_id
-    - find_by_name: Find a KA by exact name
-    - delete: Delete a KA by tile_id
-
-    Args:
-        action: "create_or_update", "get", "find_by_name", or "delete"
-        name: Name for the KA (for create_or_update, find_by_name)
-        volume_path: Path to the volume folder containing documents
-            (e.g., "/Volumes/catalog/schema/volume/folder") (for create_or_update)
-        description: Optional description of what the KA does (for create_or_update)
-        instructions: Optional instructions for how the KA should answer (for create_or_update)
-        tile_id: The KA tile ID (for get, delete, or update via create_or_update)
-        add_examples_from_volume: If True, scan the volume for JSON files
-            containing question/guideline pairs and add them as examples (for create_or_update)
-
-    Returns:
-        Dict with operation result. Varies by action:
-        - create_or_update: tile_id, name, operation, endpoint_status, examples_queued
-        - get: tile_id, name, description, endpoint_status, knowledge_sources, examples_count
-        - find_by_name: found, tile_id, name, endpoint_name, endpoint_status
-        - delete: success, tile_id
-
-    Example:
-        >>> manage_ka(
-        ...     action="create_or_update",
-        ...     name="HR Policy Assistant",
-        ...     volume_path="/Volumes/my_catalog/my_schema/raw_data/hr_docs",
-        ...     description="Answers questions about HR policies",
-        ...     instructions="Be helpful and cite specific policies when answering"
-        ... )
-        {
-            "tile_id": "01abc...",
-            "name": "HR_Policy_Assistant",
-            "operation": "created",
-            "endpoint_status": "PROVISIONING",
-            "examples_queued": 5
-        }
-    """
+    Actions: create_or_update (name+volume_path), get (tile_id), find_by_name (name), delete (tile_id).
+    add_examples_from_volume: scan volume for JSON example files.
+    See agent-bricks skill for full details.
+    Returns: create_or_update={tile_id, operation, endpoint_status}, get={tile_id, knowledge_sources, examples_count},
+    find_by_name={found, tile_id, endpoint_name}, delete={success}."""
     action = action.lower()
 
     if action == "create_or_update":
@@ -556,73 +517,13 @@ def manage_mas(
     tile_id: str = None,
     examples: List[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    """
-    Create or update a Supervisor Agent (formerly Multi-Agent Supervisor, MAS).
+    """Manage Supervisor Agent (MAS) - orchestrates multiple agents for query routing.
 
-    A Supervisor Agent orchestrates multiple agents, routing user queries to the appropriate
-    specialized agent based on the query content. Supports model serving endpoints,
-    Genie spaces, Knowledge Assistants, UC functions, and external MCP servers as agents.
-
-    Actions:
-    - create_or_update: Create or update a Supervisor Agent (requires name, agents)
-    - get: Get Supervisor Agent details by tile_id
-    - find_by_name: Find a Supervisor Agent by exact name
-    - delete: Delete a Supervisor Agent by tile_id
-
-    Args:
-        action: "create_or_update", "get", "find_by_name", or "delete"
-        name: Name for the Supervisor Agent (for create_or_update, find_by_name)
-        agents: List of agent configurations (for create_or_update). Each agent requires:
-            - name: Agent identifier (used internally for routing)
-            - description: What this agent handles (critical for routing decisions)
-            - endpoint_name: Model serving endpoint name (for custom agents)
-            - genie_space_id: Genie space ID (for SQL-based data agents)
-            - ka_tile_id: Knowledge Assistant tile ID (for document Q&A agents)
-            - uc_function_name: Unity Catalog function name in format 'catalog.schema.function_name'
-            - connection_name: Unity Catalog connection name (for external MCP servers)
-            Note: Provide exactly one of: endpoint_name, genie_space_id,
-                ka_tile_id, uc_function_name, or connection_name.
-        description: Optional description of what the MAS does (for create_or_update)
-        instructions: Optional routing instructions for the supervisor (for create_or_update)
-        tile_id: The Supervisor Agent tile ID (for get, delete, or update via create_or_update)
-        examples: Optional list of example questions (for create_or_update), each with:
-            - question: The example question
-            - guideline: Expected routing behavior or answer guidelines
-
-    Returns:
-        Dict with operation result. Varies by action:
-        - create_or_update: tile_id, name, operation, endpoint_status, agents_count
-        - get: tile_id, name, description, endpoint_status, agents, examples_count
-        - find_by_name: found, tile_id, name, endpoint_status, agents_count
-        - delete: success, tile_id
-
-    Example:
-        >>> manage_mas(
-        ...     action="create_or_update",
-        ...     name="Customer Support MAS",
-        ...     agents=[
-        ...         {
-        ...             "name": "policy_agent",
-        ...             "ka_tile_id": "f32c5f73-466b-...",
-        ...             "description": "Answers questions about company policies and procedures"
-        ...         },
-        ...         {
-        ...             "name": "analytics_agent",
-        ...             "genie_space_id": "01abc123...",
-        ...             "description": "Answers data questions about usage and metrics"
-        ...         }
-        ...     ],
-        ...     description="Routes customer queries to specialized agents",
-        ...     instructions="Route policy questions to policy_agent, data questions to analytics_agent."
-        ... )
-        {
-            "tile_id": "01xyz...",
-            "name": "Customer_Support_MAS",
-            "operation": "created",
-            "endpoint_status": "PROVISIONING",
-            "agents_count": 2
-        }
-    """
+    Actions: create_or_update (name+agents), get (tile_id), find_by_name (name), delete (tile_id).
+    agents: [{name, description, ONE OF: endpoint_name|genie_space_id|ka_tile_id|uc_function_name|connection_name}].
+    See agent-bricks skill for full agent configuration details.
+    Returns: create_or_update={tile_id, operation, endpoint_status, agents_count}, get={tile_id, agents, examples_count},
+    find_by_name={found, tile_id, agents_count}, delete={success}."""
     action = action.lower()
 
     if action == "create_or_update":
