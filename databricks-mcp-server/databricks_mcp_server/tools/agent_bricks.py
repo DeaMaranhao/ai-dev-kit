@@ -81,17 +81,15 @@ def _ka_create_or_update(
         tile_id=tile_id,
     )
 
-    # Extract tile info
-    ka_data = result.get("knowledge_assistant", {})
-    tile_data = ka_data.get("tile", {})
-    status_data = ka_data.get("status", {})
-
-    response_tile_id = tile_data.get("tile_id", "")
-    endpoint_status = status_data.get("endpoint_status", "UNKNOWN")
+    # Extract info from new flat format
+    response_tile_id = result.get("tile_id", "")
+    # Map SDK state to endpoint status for backward compatibility
+    state = result.get("state", "UNKNOWN")
+    endpoint_status = "ONLINE" if state == "ACTIVE" else ("PROVISIONING" if state == "CREATING" else state)
 
     response = {
         "tile_id": response_tile_id,
-        "name": tile_data.get("name", name),
+        "name": result.get("name", name),
         "operation": result.get("operation", "created"),
         "endpoint_status": endpoint_status,
         "examples_queued": 0,
@@ -101,8 +99,8 @@ def _ka_create_or_update(
     if add_examples_from_volume and response_tile_id:
         examples = manager.scan_volume_for_examples(volume_path)
         if examples:
-            # If endpoint is ONLINE, add examples directly
-            if endpoint_status == EndpointStatus.ONLINE.value:
+            # If endpoint is ACTIVE, add examples directly
+            if state == "ACTIVE":
                 created = manager.ka_add_examples_batch(response_tile_id, examples)
                 response["examples_added"] = len(created)
             else:
@@ -138,10 +136,6 @@ def _ka_get(tile_id: str) -> Dict[str, Any]:
     if not result:
         return {"error": f"Knowledge Assistant {tile_id} not found"}
 
-    ka_data = result.get("knowledge_assistant", {})
-    tile_data = ka_data.get("tile", {})
-    status_data = ka_data.get("status", {})
-
     # Get examples count (handle failures gracefully)
     try:
         examples_response = manager.ka_list_examples(tile_id)
@@ -149,14 +143,19 @@ def _ka_get(tile_id: str) -> Dict[str, Any]:
     except Exception:
         examples_count = 0
 
+    # Map SDK state to endpoint status for backward compatibility
+    state = result.get("state", "UNKNOWN")
+    endpoint_status = "ONLINE" if state == "ACTIVE" else ("PROVISIONING" if state == "CREATING" else state)
+
     return {
-        "tile_id": tile_data.get("tile_id", tile_id),
-        "name": tile_data.get("name", ""),
-        "description": tile_data.get("description", ""),
-        "endpoint_status": status_data.get("endpoint_status", "UNKNOWN"),
-        "knowledge_sources": ka_data.get("knowledge_sources", []),
+        "tile_id": result.get("tile_id", tile_id),
+        "name": result.get("name", ""),
+        "description": result.get("description", ""),
+        "endpoint_status": endpoint_status,
+        "endpoint_name": result.get("endpoint_name", ""),
+        "knowledge_sources": result.get("sources", []),
         "examples_count": examples_count,
-        "instructions": ka_data.get("instructions", ""),
+        "instructions": result.get("instructions", ""),
     }
 
 
@@ -171,21 +170,20 @@ def _ka_find_by_name(name: str) -> Dict[str, Any]:
     if result is None:
         return {"found": False, "name": name}
 
-    # Fetch full details to get endpoint status
+    # Fetch full details to get endpoint status and name
     full_details = manager.ka_get(result.tile_id)
     endpoint_status = "UNKNOWN"
+    endpoint_name = ""
     if full_details:
-        endpoint_status = (
-            full_details.get("knowledge_assistant", {}).get("status", {}).get("endpoint_status", "UNKNOWN")
-        )
+        state = full_details.get("state", "UNKNOWN")
+        endpoint_status = "ONLINE" if state == "ACTIVE" else ("PROVISIONING" if state == "CREATING" else state)
+        endpoint_name = full_details.get("endpoint_name", "")
 
-    # Endpoint name uses only the first segment of the tile_id (before the first hyphen)
-    tile_id_prefix = result.tile_id.split("-")[0]
     return {
         "found": True,
         "tile_id": result.tile_id,
         "name": result.name,
-        "endpoint_name": f"ka-{tile_id_prefix}-endpoint",
+        "endpoint_name": endpoint_name,
         "endpoint_status": endpoint_status,
     }
 
