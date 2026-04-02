@@ -4,7 +4,7 @@ Middleware for the Databricks MCP Server.
 Provides cross-cutting concerns like timeout and error handling for all MCP tool calls.
 """
 
-import asyncio
+import anyio
 import json
 import logging
 import traceback
@@ -74,26 +74,17 @@ class TimeoutHandlingMiddleware(Middleware):
                 ]
             )
 
-        except asyncio.CancelledError:
+        except anyio.get_cancelled_exc_class():
+            # Re-raise CancelledError so MCP SDK's handler catches it and skips
+            # calling message.respond(). If we return a result here, the SDK will
+            # try to respond, but the request may already be marked as responded
+            # by the cancellation handler, causing an AssertionError crash.
+            # See: https://github.com/modelcontextprotocol/python-sdk/pull/1153
             logger.warning(
-                "Tool '%s' was cancelled. Returning structured result.",
+                "Tool '%s' was cancelled. Re-raising to let MCP SDK handle cleanup.",
                 tool_name,
             )
-            return ToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=json.dumps(
-                            {
-                                "error": True,
-                                "error_type": "cancelled",
-                                "tool": tool_name,
-                                "message": "Operation was cancelled by the client",
-                            }
-                        ),
-                    )
-                ]
-            )
+            raise
 
         except Exception as e:
             # Log the full traceback for debugging
