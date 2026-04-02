@@ -1,6 +1,52 @@
 # Complete Dashboard Example
 
-A production-ready dashboard template with global filters, KPIs, charts, and tables. Copy and adapt for your use case.
+This is a **reference example** to understand the JSON structure and layout patterns. **Always adapt to what the user requests** - use their tables, metrics, and visualizations. This example demonstrates the correct syntax; your dashboard should reflect the user's actual requirements.
+
+## Key Patterns (Read First)
+
+### 1. Page Types (Required)
+- `PAGE_TYPE_CANVAS` - Main content page with widgets
+- `PAGE_TYPE_GLOBAL_FILTERS` - Dedicated filter page that affects all canvas pages
+
+### 2. Widget Versions (Critical!)
+| Widget Type | Version |
+|-------------|---------|
+| `counter`, `table` | **2** |
+| `bar`, `line`, `area`, `pie` | **3** |
+| `filter-*` | **2** |
+
+### 3. KPI Counter with Currency Formatting
+```json
+"format": {
+  "type": "number-currency",
+  "currencyCode": "USD",
+  "abbreviation": "compact",
+  "decimalPlaces": {"type": "max", "places": 1}
+}
+```
+
+### 4. Filter Binding to Multiple Datasets
+Each filter query binds the filter to one dataset. Add multiple queries to filter multiple datasets:
+```json
+"queries": [
+  {"name": "ds1_region", "query": {"datasetName": "dataset1", ...}},
+  {"name": "ds2_region", "query": {"datasetName": "dataset2", ...}}
+]
+```
+
+### 5. Layout Grid (6 columns)
+```
+y=0:  Header with title + description (w=6, h=2)
+y=2:  KPI(w=2,h=3) | KPI(w=2,h=3) | KPI(w=2,h=3)  ← fills 6
+y=5:  Section header (w=6, h=1)
+y=6:  Area chart (w=6, h=5)
+y=11: Section header (w=6, h=1)
+y=12: Pie(w=2,h=5) | Bar chart(w=4,h=5)           ← fills 6
+```
+
+Use `\n\n` in text widget lines array to create line breaks within a single widget.
+
+---
 
 ## Full Dashboard: Sales Analytics
 
@@ -448,46 +494,3 @@ This example shows a complete dashboard with:
   ]
 }
 ```
-
-## Key Patterns Demonstrated
-
-### 1. Page Types
-- `PAGE_TYPE_CANVAS` - Main content page with widgets
-- `PAGE_TYPE_GLOBAL_FILTERS` - Dedicated filter page that affects all canvas pages
-
-### 2. Widget Versions (Critical!)
-- `counter` and `table`: **version 2**
-- `bar`, `line`, `area`, `pie`: **version 3**
-- `filter-*`: **version 2**
-
-### 3. KPI Counter with Currency Formatting
-```json
-"format": {
-  "type": "number-currency",
-  "currencyCode": "USD",
-  "abbreviation": "compact",
-  "decimalPlaces": {"type": "max", "places": 1}
-}
-```
-
-### 4. Filter Binding to Multiple Datasets
-Each filter query binds the filter to one dataset. Add multiple queries to filter multiple datasets:
-```json
-"queries": [
-  {"name": "ds1_region", "query": {"datasetName": "dataset1", ...}},
-  {"name": "ds2_region", "query": {"datasetName": "dataset2", ...}}
-]
-```
-
-### 5. Layout Grid (6 columns)
-```
-y=0:  Header with title + description (w=6, h=2)
-y=2:  KPI(w=2,h=3) | KPI(w=2,h=3) | KPI(w=2,h=3)  ← fills 6
-y=5:  Section header (w=6, h=1)
-y=6:  Area chart (w=6, h=5)
-y=11: Section header (w=6, h=1)
-y=12: Pie(w=2,h=5) | Bar chart(w=4,h=5)           ← fills 6
-...
-```
-
-Use `\n\n` in text widget lines array to create line breaks within a single widget.
