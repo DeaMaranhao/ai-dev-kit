@@ -2,6 +2,19 @@
 
 Common errors and fixes for AI/BI dashboards.
 
+## Structural Errors (JSON Parse Failures)
+
+These errors occur when the JSON structure is wrong:
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| "failed to parse serialized dashboard" | Wrong JSON structure | Check: `queryLines` is array (not `"query": "string"`), widgets inline in `layout[].widget`, `pageType` on every page |
+| "no selected fields to visualize" | `fields[].name` ≠ `encodings.fieldName` | Names must match exactly (e.g., both `"sum(spend)"`) |
+| Widgets in wrong location | Used separate `"widgets"` array | Widgets must be INLINE: `layout[]: {widget: {...}, position: {...}}` |
+| Missing page content | Omitted `pageType` | Add `"pageType": "PAGE_TYPE_CANVAS"` or `"PAGE_TYPE_GLOBAL_FILTERS"` |
+
+---
+
 ## Widget shows "no selected fields to visualize"
 
 **This is a field name mismatch error.** The `name` in `query.fields` must exactly match the `fieldName` in `encodings`.

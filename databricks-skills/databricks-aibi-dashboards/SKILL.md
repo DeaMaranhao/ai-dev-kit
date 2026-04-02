@@ -61,6 +61,36 @@ If values don't match expectations (e.g., "spike should be 3x normal" but data s
 
 ---
 
+## JSON Structure (Required Skeleton)
+
+Every dashboard must follow this exact structure. Do NOT guess - wrong structure = parse failure.
+
+```json
+{
+  "datasets": [
+    {"name": "ds_x", "displayName": "X", "queryLines": ["SELECT ... ", "FROM catalog.schema.table"]}
+  ],
+  "pages": [
+    {
+      "name": "main", "displayName": "Main", "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [{"widget": {/* INLINE */}, "position": {"x":0,"y":0,"width":2,"height":3}}]
+    },
+    {
+      "name": "filters", "displayName": "Filters", "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
+      "layout": [...]
+    }
+  ]
+}
+```
+
+**Structural rules (violations cause "failed to parse serialized dashboard"):**
+- `queryLines`: Array of strings, NOT `"query": "string"`
+- Widgets: INLINE in `layout[].widget`, NOT a separate `"widgets"` array
+- `pageType`: Required on every page (`PAGE_TYPE_CANVAS` or `PAGE_TYPE_GLOBAL_FILTERS`)
+- Query binding: `query.fields[].name` must exactly match `encodings.*.fieldName`
+
+---
+
 ## Design Best Practices
 
 Apply unless user specifies otherwise (adapt to the use-case/project):
@@ -95,6 +125,9 @@ Apply unless user specifies otherwise (adapt to the use-case/project):
 |-------|-------------|
 | `publish` | Auto-publish after create (default: True) |
 | `genie_space_id` | Link a Genie space to enable "Ask Genie" button on the dashboard |
+
+> **Genie is NOT a widget.** Link via `genie_space_id` param only. There is no `"widgetType": "assistant"` or similar.
+
 | `catalog` | Default catalog for unqualified table names in dataset SQL |
 | `schema` | Default schema for unqualified table names in dataset SQL |
 
