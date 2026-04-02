@@ -53,25 +53,20 @@ class TimeoutHandlingMiddleware(Middleware):
                 "Tool '%s' timed out. Returning structured result.",
                 tool_name,
             )
+            error_data = {
+                "error": True,
+                "error_type": "timeout",
+                "tool": tool_name,
+                "message": str(e) or "Operation timed out",
+                "action_required": (
+                    "Operation may still be in progress. "
+                    "Do NOT retry the same call. "
+                    "Use the appropriate get/status tool to check current state."
+                ),
+            }
             return ToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=json.dumps(
-                            {
-                                "error": True,
-                                "error_type": "timeout",
-                                "tool": tool_name,
-                                "message": str(e) or "Operation timed out",
-                                "action_required": (
-                                    "Operation may still be in progress. "
-                                    "Do NOT retry the same call. "
-                                    "Use the appropriate get/status tool to check current state."
-                                ),
-                            }
-                        ),
-                    )
-                ]
+                content=[TextContent(type="text", text=json.dumps(error_data))],
+                structured_content=error_data,
             )
 
         except anyio.get_cancelled_exc_class():
@@ -95,22 +90,16 @@ class TimeoutHandlingMiddleware(Middleware):
                 traceback.format_exc(),
             )
 
-            # Return a structured error response
-            error_message = str(e)
-            error_type = type(e).__name__
-
+            # Return a structured error response with both content and structured_content.
+            # structured_content is required when tools have an outputSchema defined
+            # (which fastmcp auto-generates from return type annotations like Dict[str, Any]).
+            error_data = {
+                "error": True,
+                "error_type": type(e).__name__,
+                "tool": tool_name,
+                "message": str(e),
+            }
             return ToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=json.dumps(
-                            {
-                                "error": True,
-                                "error_type": error_type,
-                                "tool": tool_name,
-                                "message": error_message,
-                            }
-                        ),
-                    )
-                ]
+                content=[TextContent(type="text", text=json.dumps(error_data))],
+                structured_content=error_data,
             )
